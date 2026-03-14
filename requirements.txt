@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+streamlit
+openai
+psycopg[binary]
+sqlalchemy
+pgvector
+pydantic
+python-dotenv
+sqlglot
+tenacity
+pandas
+numpy
