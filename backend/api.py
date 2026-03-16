@@ -3,12 +3,15 @@ import psycopg
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from pathlib import Path
 
 from backend.sql_generator import generate_sql
 from backend.sql_validator import validate_sql
 from backend.sql_executor import execute_sql
 
-load_dotenv()
+# Load .env from project root
+env_path = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(env_path, override=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
