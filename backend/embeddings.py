@@ -3,11 +3,25 @@ import psycopg
 from openai import OpenAI
 from dotenv import load_dotenv
 
+# ---------------------------------------------------------
+# Load environment variables from project root
+# ---------------------------------------------------------
+
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# Debug verification
+if not OPENAI_API_KEY:
+    raise ValueError("OPENAI_API_KEY not found in environment variables")
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL not found in environment variables")
+
+print("OpenAI key loaded:", OPENAI_API_KEY[:10] + "...")
+
+# Initialize OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 
