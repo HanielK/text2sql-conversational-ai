@@ -2,16 +2,15 @@ import json
 import time
 from typing import Any, Dict
 
+from backend.feedback_store import save_failure_case
 from backend.logging_utils import logger, log_event, new_request_id
 from backend.planner import build_query_plan
 from backend.sql_validator import validate_sql
 from backend.sql_generator import generate_sql_from_plan
-
-# existing imports from your app
 from backend.embeddings import retrieve_relevant_schema, retrieve_relevant_columns
 
 
-def run_text_to_sql_pipeline(question: str) -> Dict[str, Any]:
+def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Dict[str, Any]:
     request_id = new_request_id()
     started = time.perf_counter()
 
@@ -20,11 +19,16 @@ def run_text_to_sql_pipeline(question: str) -> Dict[str, Any]:
         "Pipeline started",
         request_id=request_id,
         stage="pipeline_start",
-        extra={"question": question},
+        extra={
+            "question": question,
+            "session_id": session_id
+        },
     )
 
     try:
-        # 1. Schema retrieval
+        # -------------------------------------------------
+        # 1. Schema Retrieval
+        # -------------------------------------------------
         t0 = time.perf_counter()
         schema_text = retrieve_relevant_schema(question)
         column_text = retrieve_relevant_columns(question)
@@ -41,7 +45,9 @@ def run_text_to_sql_pipeline(question: str) -> Dict[str, Any]:
             },
         )
 
-        # 2. Query planning
+        # -------------------------------------------------
+        # 2. Query Planning
+        # -------------------------------------------------
         t1 = time.perf_counter()
         plan = build_query_plan(
             question=question,
@@ -60,7 +66,9 @@ def run_text_to_sql_pipeline(question: str) -> Dict[str, Any]:
             },
         )
 
-        # 3. SQL generation
+        # -------------------------------------------------
+        # 3. SQL Generation (with Golden Queries)
+        # -------------------------------------------------
         t2 = time.perf_counter()
         raw_sql = generate_sql_from_plan(
             question=question,
@@ -80,7 +88,9 @@ def run_text_to_sql_pipeline(question: str) -> Dict[str, Any]:
             },
         )
 
-        # 4. SQL validation
+        # -------------------------------------------------
+        # 4. SQL Validation
+        # -------------------------------------------------
         t3 = time.perf_counter()
         is_valid, validation_message, safe_sql = validate_sql(raw_sql)
 
@@ -97,7 +107,20 @@ def run_text_to_sql_pipeline(question: str) -> Dict[str, Any]:
             },
         )
 
+        # -------------------------------------------------
+        # 5. Handle Validation Failure
+        # -------------------------------------------------
         if not is_valid:
+            save_failure_case(
+                request_id=request_id,
+                session_id=session_id or "unknown",
+                question=question,
+                route="sql",
+                error=validation_message,
+                sql=raw_sql,
+                plan=plan,
+            )
+
             return {
                 "success": False,
                 "request_id": request_id,
@@ -108,6 +131,9 @@ def run_text_to_sql_pipeline(question: str) -> Dict[str, Any]:
                 "error": validation_message,
             }
 
+        # -------------------------------------------------
+        # 6. Success
+        # -------------------------------------------------
         total_ms = round((time.perf_counter() - started) * 1000, 2)
 
         log_event(
@@ -131,6 +157,17 @@ def run_text_to_sql_pipeline(question: str) -> Dict[str, Any]:
         }
 
     except Exception as exc:
+        # -------------------------------------------------
+        # 7. Exception Handling
+        # -------------------------------------------------
+        save_failure_case(
+            request_id=request_id,
+            session_id=session_id or "unknown",
+            question=question,
+            route="sql",
+            error=str(exc),
+        )
+
         log_event(
             logger,
             "Pipeline failed",

@@ -1,240 +1,58 @@
-import os
-import json
-import re
 from openai import OpenAI
-from dotenv import load_dotenv
-from pathlib import Path
-from backend.embeddings import retrieve_relevant_schema, retrieve_relevant_columns
-from backend.context_memory import get_last_result
+
+from backend.config import settings
+from backend.golden_queries import retrieve_similar_golden_queries
+from backend.prompt_templates import (
+    SQL_GENERATOR_SYSTEM_PROMPT,
+    SQL_GENERATOR_USER_PROMPT,
+)
+
+client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
-def extract_json_from_llm(text: str):
-    """
-    Robustly extract JSON from LLM response (handles markdown, noise)
-    """
+def _format_golden_examples(question: str, top_k: int = 3) -> str:
+    examples = retrieve_similar_golden_queries(question, top_k=top_k)
 
-    # Remove markdown fences
-    text = text.replace("```json", "").replace("```", "").strip()
+    if not examples:
+        return "No golden query examples available."
 
-    # Try direct parse
-    try:
-        return json.loads(text)
-    except:
-        pass
-
-    # Try regex extraction (fallback)
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except:
-            pass
-
-    raise ValueError("Failed to parse LLM JSON response")
-
-# ---------------------------------------------------------
-# Load environment variables
-# ---------------------------------------------------------
-
-env_path = Path(__file__).resolve().parents[1] / ".env"
-load_dotenv(env_path, override=True)
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY not found in environment variables")
-
-client = OpenAI(api_key=OPENAI_API_KEY)
-
-
-# ---------------------------------------------------------
-# Query planning step
-# ---------------------------------------------------------
-
-def plan_query(question: str, schema_text: str):
-
-    prompt = f"""
-You are a senior data analyst planning a SQL query.
-
-DATABASE SCHEMA:
-{schema_text}
-
-USER QUESTION:
-{question}
-
-Return a JSON plan with this structure:
-
-{{
-  "tables_needed": ["table1", "table2"],
-  "columns_needed": ["column1", "column2"],
-  "filters": ["any filtering logic"],
-  "aggregations": ["aggregation if needed"],
-  "joins": ["join relationships if needed"]
-}}
-
-Rules:
-- Only reference tables in the schema
-- Do not write SQL
-- Only return JSON
+    lines = []
+    for i, ex in enumerate(examples, start=1):
+        lines.append(
+            f"""Example {i}:
+Question: {ex.get("question", "")}
+SQL: {ex.get("sql", "")}
+Similarity Score: {ex.get("similarity_score", 0)}
 """
+        )
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0
-    )
+    return "\n".join(lines)
 
-    content = response.choices[0].message.content.strip()
-
-    try:
-        return json.loads(content)
-    except Exception:
-        return {
-            "tables_needed": [],
-            "columns_needed": [],
-            "filters": [],
-            "aggregations": [],
-            "joins": []
-        }
-
-
-# ---------------------------------------------------------
-# SQL generation step
-# ---------------------------------------------------------
 
 def generate_sql_from_plan(
     question: str,
     schema_text: str,
-    column_context: str,
-    plan: dict,
-    error_message: str | None,
-    previous_result
-):
+    plan_json: str,
+    column_text: str = "",
+) -> str:
+    golden_examples = _format_golden_examples(question)
 
-    correction_block = ""
-    if error_message:
-        correction_block = f"""
-PREVIOUS SQL EXECUTION ERROR:
-{error_message}
-
-Correct the SQL based on this error.
-"""
-
-    prompt = f"""
-You are an expert PostgreSQL data analyst.
-
-DATABASE SCHEMA:
-{schema_text}
-
-RELEVANT COLUMNS:
-{column_context}
-
-QUERY PLAN:
-{json.dumps(plan, indent=2)}
-
-PREVIOUS QUERY RESULT (if relevant):
-{previous_result}
-
-USER QUESTION:
-{question}
-
-{correction_block}
-
-Return your answer in valid JSON with this structure:
-
-{{
-  "reasoning": "explain how the plan was converted into SQL",
-  "tables_used": ["table1", "table2"],
-  "sql": "valid PostgreSQL SQL"
-}}
-
-Rules:
-- Return only JSON
-- SQL must be valid PostgreSQL
-- Use only tables from the schema
-- Prefer explicit column names
-- Add LIMIT 1000 unless aggregation returns one row
-"""
+    user_prompt = SQL_GENERATOR_USER_PROMPT.format(
+        schema_text=schema_text or "No schema provided.",
+        column_text=column_text or "No column context provided.",
+        question=question,
+        plan_json=plan_json,
+        golden_examples=golden_examples,
+    )
 
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0
+        model=settings.OPENAI_MODEL,
+        temperature=0,
+        messages=[
+            {"role": "system", "content": SQL_GENERATOR_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
     )
 
-    content = response.choices[0].message.content.strip()
-
-    try:
-        parsed = extract_json_from_llm(content)
-
-        return {
-            "reasoning": parsed.get("reasoning", ""),
-            "tables_used": parsed.get("tables_used", []),
-            "sql": parsed.get("sql", "").strip()
-        }
-
-    except Exception:
-        return {
-            "reasoning": "Fallback parse used because model did not return clean JSON.",
-            "tables_used": plan.get("tables_needed", []),
-            "sql": content.strip()
-        }
-
-
-# ---------------------------------------------------------
-# Main SQL generator
-# ---------------------------------------------------------
-
-def generate_sql(question: str, session_id: str | None = None, error_message: str | None = None):
-
-    # -----------------------------------------------------
-    # Retrieve relevant schema using embeddings
-    # -----------------------------------------------------
-
-    schema_context = retrieve_relevant_schema(question)
-    schema_text = "\n".join([row[1] for row in schema_context])
-
-    # -----------------------------------------------------
-    # Retrieve relevant columns using embeddings
-    # -----------------------------------------------------
-
-    relevant_columns = retrieve_relevant_columns(question)
-
-    column_context = "\n".join(
-        [f"{row[0]}.{row[1]}" for row in relevant_columns]
-    )
-
-    # -----------------------------------------------------
-    # Retrieve previous query result for context memory
-    # -----------------------------------------------------
-
-    previous_result = None
-
-    if session_id:
-        previous_result = get_last_result(session_id)
-
-    # -----------------------------------------------------
-    # Step 1: Plan the query
-    # -----------------------------------------------------
-
-    plan = plan_query(question, schema_text)
-
-    # -----------------------------------------------------
-    # Step 2: Generate SQL using the plan
-    # -----------------------------------------------------
-
-    result = generate_sql_from_plan(
-        question,
-        schema_text,
-        column_context,
-        plan,
-        error_message,
-        previous_result
-    )
-
-    result["schema_context"] = schema_context
-    result["column_context"] = column_context
-    result["query_plan"] = plan
-    result["previous_result_used"] = previous_result is not None
-
-    return result
+    sql = response.choices[0].message.content.strip()
+    return sql.strip("`").replace("sql\n", "").strip()

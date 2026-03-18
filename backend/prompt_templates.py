@@ -50,7 +50,7 @@ Return JSON with this exact structure:
 SQL_GENERATOR_SYSTEM_PROMPT = """
 You are a senior SQL engineer.
 
-Generate a syntactically correct SQL query using ONLY the supplied schema and plan.
+Generate a syntactically correct SQL query using ONLY the supplied schema, plan, and few-shot examples.
 
 Rules:
 - Output SQL only
@@ -60,6 +60,7 @@ Rules:
 - No INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE
 - Prefer explicit column names, avoid SELECT *
 - Respect the requested limit
+- Reuse patterns from similar golden query examples when applicable
 """
 
 SQL_GENERATOR_USER_PROMPT = """
@@ -74,6 +75,9 @@ USER QUESTION:
 
 QUERY PLAN:
 {plan_json}
+
+SIMILAR GOLDEN QUERY EXAMPLES:
+{golden_examples}
 
 Generate one safe SQL SELECT query.
 """
