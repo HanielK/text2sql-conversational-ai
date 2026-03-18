@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from backend.feedback_store import save_failure_case
 from backend.logging_utils import logger, log_event, new_request_id
+from backend.query_analyzer import analyze_question
 from backend.planner import build_query_plan
 from backend.sql_validator import validate_sql
 from backend.sql_generator import generate_sql_from_plan
@@ -21,17 +22,68 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
         stage="pipeline_start",
         extra={
             "question": question,
-            "session_id": session_id
+            "session_id": session_id,
         },
     )
 
     try:
         # -------------------------------------------------
-        # 1. Schema Retrieval
+        # 1. Analyze question (route + confidence + rewrite + ambiguity)
+        # -------------------------------------------------
+        t_analyze = time.perf_counter()
+        analysis = analyze_question(question)
+
+        log_event(
+            logger,
+            "Question analysis complete",
+            request_id=request_id,
+            stage="question_analysis",
+            extra={
+                "duration_ms": round((time.perf_counter() - t_analyze) * 1000, 2),
+                "analysis": analysis,
+            },
+        )
+
+        rewritten_question = analysis.get("rewritten_question", question)
+        route = analysis.get("route", "sql")
+        confidence = analysis.get("confidence", 0.5)
+        is_ambiguous = analysis.get("is_ambiguous", False)
+        clarification_question = analysis.get("clarification_question", "")
+
+        if is_ambiguous:
+            log_event(
+                logger,
+                "Question requires clarification",
+                request_id=request_id,
+                stage="clarification_required",
+                status="needs_clarification",
+                extra={
+                    "clarification_question": clarification_question,
+                    "rewritten_question": rewritten_question,
+                    "route": route,
+                    "confidence": confidence,
+                },
+            )
+
+            return {
+                "success": False,
+                "needs_clarification": True,
+                "request_id": request_id,
+                "question": question,
+                "rewritten_question": rewritten_question,
+                "route": route,
+                "confidence": confidence,
+                "clarification_question": clarification_question,
+                "analysis": analysis,
+                "error": "Clarification required before SQL generation.",
+            }
+
+        # -------------------------------------------------
+        # 2. Schema retrieval
         # -------------------------------------------------
         t0 = time.perf_counter()
-        schema_text = retrieve_relevant_schema(question)
-        column_text = retrieve_relevant_columns(question)
+        schema_text = retrieve_relevant_schema(rewritten_question)
+        column_text = retrieve_relevant_columns(rewritten_question)
 
         log_event(
             logger,
@@ -42,15 +94,16 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
                 "duration_ms": round((time.perf_counter() - t0) * 1000, 2),
                 "schema_preview": str(schema_text)[:1500],
                 "column_preview": str(column_text)[:1500],
+                "rewritten_question": rewritten_question,
             },
         )
 
         # -------------------------------------------------
-        # 2. Query Planning
+        # 3. Query planning
         # -------------------------------------------------
         t1 = time.perf_counter()
         plan = build_query_plan(
-            question=question,
+            question=rewritten_question,
             schema_text=schema_text,
             column_text=column_text,
         )
@@ -67,11 +120,11 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
         )
 
         # -------------------------------------------------
-        # 3. SQL Generation (with Golden Queries)
+        # 4. SQL generation
         # -------------------------------------------------
         t2 = time.perf_counter()
         raw_sql = generate_sql_from_plan(
-            question=question,
+            question=rewritten_question,
             schema_text=schema_text,
             column_text=column_text,
             plan_json=json.dumps(plan, indent=2),
@@ -89,7 +142,7 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
         )
 
         # -------------------------------------------------
-        # 4. SQL Validation
+        # 5. SQL validation
         # -------------------------------------------------
         t3 = time.perf_counter()
         is_valid, validation_message, safe_sql = validate_sql(raw_sql)
@@ -108,14 +161,14 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
         )
 
         # -------------------------------------------------
-        # 5. Handle Validation Failure
+        # 6. Validation failure
         # -------------------------------------------------
         if not is_valid:
             save_failure_case(
                 request_id=request_id,
                 session_id=session_id or "unknown",
                 question=question,
-                route="sql",
+                route=route,
                 error=validation_message,
                 sql=raw_sql,
                 plan=plan,
@@ -123,8 +176,13 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
 
             return {
                 "success": False,
+                "needs_clarification": False,
                 "request_id": request_id,
                 "question": question,
+                "rewritten_question": rewritten_question,
+                "route": route,
+                "confidence": confidence,
+                "analysis": analysis,
                 "plan": plan,
                 "raw_sql": raw_sql,
                 "safe_sql": safe_sql,
@@ -132,7 +190,7 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
             }
 
         # -------------------------------------------------
-        # 6. Success
+        # 7. Success
         # -------------------------------------------------
         total_ms = round((time.perf_counter() - started) * 1000, 2)
 
@@ -146,8 +204,13 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
 
         return {
             "success": True,
+            "needs_clarification": False,
             "request_id": request_id,
             "question": question,
+            "rewritten_question": rewritten_question,
+            "route": route,
+            "confidence": confidence,
+            "analysis": analysis,
             "plan": plan,
             "raw_sql": raw_sql,
             "safe_sql": safe_sql,
@@ -157,9 +220,6 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
         }
 
     except Exception as exc:
-        # -------------------------------------------------
-        # 7. Exception Handling
-        # -------------------------------------------------
         save_failure_case(
             request_id=request_id,
             session_id=session_id or "unknown",
@@ -179,6 +239,7 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
 
         return {
             "success": False,
+            "needs_clarification": False,
             "request_id": request_id,
             "question": question,
             "error": str(exc),

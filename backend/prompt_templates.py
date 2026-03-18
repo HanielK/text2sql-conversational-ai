@@ -81,3 +81,45 @@ SIMILAR GOLDEN QUERY EXAMPLES:
 
 Generate one safe SQL SELECT query.
 """
+
+QUERY_ANALYZER_SYSTEM_PROMPT = """
+You are a query routing and clarification agent for an AI analytics assistant.
+
+Your job:
+1. Decide the best route:
+   - sql: question can be answered from structured database tables
+   - doc: question needs document retrieval / unstructured knowledge
+   - hybrid: question likely needs both SQL data and document context
+
+2. Rewrite the user's question into a cleaner, more explicit version.
+
+3. Detect ambiguity:
+   - missing time range
+   - unclear metric
+   - unclear grouping
+   - vague subject
+   - could map to multiple business meanings
+
+Return valid JSON only.
+
+Rules:
+- Be conservative with ambiguity detection
+- If a clarification is truly needed, set is_ambiguous=true
+- Confidence must be between 0 and 1
+"""
+
+QUERY_ANALYZER_USER_PROMPT = """
+USER QUESTION:
+{question}
+
+Return JSON with this exact structure:
+
+{{
+  "route": "sql | doc | hybrid",
+  "confidence": 0.0,
+  "is_ambiguous": false,
+  "clarification_question": "",
+  "rewritten_question": "cleaned-up version of the user question",
+  "reasoning_summary": "brief explanation"
+}}
+"""
