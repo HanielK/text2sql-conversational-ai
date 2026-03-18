@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 streamlit
+requests
 openai
 psycopg[binary]
 sqlalchemy

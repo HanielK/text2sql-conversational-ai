@@ -1,0 +1,15 @@
+PROJECT DELIVERY PLAN
+
+The project focuses on delivering a scalable AI analytics platform.
+
+Key objectives:
+- Enable natural language querying of structured data
+- Integrate document-based knowledge retrieval (RAG)
+- Support hybrid reasoning across SQL and unstructured data
+
+Timeline:
+Phase 1: Data ingestion and schema indexing
+Phase 2: AI query generation and execution
+Phase 3: Dashboard and visualization layer
+
+The system is designed for enterprise use cases including reporting, analytics, and decision support.

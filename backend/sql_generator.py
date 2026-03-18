@@ -1,10 +1,36 @@
 import os
 import json
+import re
 from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
 from backend.embeddings import retrieve_relevant_schema, retrieve_relevant_columns
 from backend.context_memory import get_last_result
+
+
+def extract_json_from_llm(text: str):
+    """
+    Robustly extract JSON from LLM response (handles markdown, noise)
+    """
+
+    # Remove markdown fences
+    text = text.replace("```json", "").replace("```", "").strip()
+
+    # Try direct parse
+    try:
+        return json.loads(text)
+    except:
+        pass
+
+    # Try regex extraction (fallback)
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except:
+            pass
+
+    raise ValueError("Failed to parse LLM JSON response")
 
 # ---------------------------------------------------------
 # Load environment variables
@@ -139,12 +165,19 @@ Rules:
     content = response.choices[0].message.content.strip()
 
     try:
-        return json.loads(content)
+        parsed = extract_json_from_llm(content)
+
+        return {
+            "reasoning": parsed.get("reasoning", ""),
+            "tables_used": parsed.get("tables_used", []),
+            "sql": parsed.get("sql", "").strip()
+        }
+
     except Exception:
         return {
             "reasoning": "Fallback parse used because model did not return clean JSON.",
             "tables_used": plan.get("tables_needed", []),
-            "sql": content
+            "sql": content.strip()
         }
 
 

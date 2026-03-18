@@ -1,50 +1,66 @@
-def validate_sql(sql: str):
-    """
-    Basic SQL safety validation.
+import re
+from typing import Tuple
 
-    Ensures:
-    - Query exists
-    - Only SELECT queries are allowed
-    - Prevents destructive operations
-    - Prevents multi-statement execution
-    """
+from backend.config import settings
 
-    if not sql or len(sql.strip()) == 0:
-        return False, "SQL query is empty."
+BANNED_SQL_KEYWORDS = {
+    "insert", "update", "delete", "drop", "alter", "truncate",
+    "grant", "revoke", "create", "replace", "merge", "call"
+}
 
-    cleaned_sql = sql.strip()
 
-    upper_sql = cleaned_sql.upper()
+def normalize_sql(sql: str) -> str:
+    sql = sql.strip().strip(";")
+    sql = re.sub(r"\s+", " ", sql)
+    return sql
 
-    # -------------------------------------------------
-    # Only allow SELECT queries
-    # -------------------------------------------------
 
-    if not upper_sql.startswith("SELECT"):
-        return False, "Only SELECT queries are allowed."
+def contains_banned_keyword(sql: str) -> Tuple[bool, str]:
+    lowered = sql.lower()
+    for keyword in BANNED_SQL_KEYWORDS:
+        if re.search(rf"\b{re.escape(keyword)}\b", lowered):
+            return True, keyword
+    return False, ""
 
-    # -------------------------------------------------
-    # Prevent destructive operations
-    # -------------------------------------------------
 
-    forbidden = [
-        "DROP ",
-        "DELETE ",
-        "TRUNCATE ",
-        "ALTER ",
-        "UPDATE ",
-        "INSERT "
-    ]
+def enforce_select_only(sql: str) -> Tuple[bool, str]:
+    lowered = sql.lower().strip()
+    if not lowered.startswith("select"):
+        return False, "Only SELECT statements are allowed."
+    return True, ""
 
-    for word in forbidden:
-        if word in upper_sql:
-            return False, f"Forbidden SQL operation detected: {word.strip()}"
 
-    # -------------------------------------------------
-    # Prevent multiple statements
-    # -------------------------------------------------
-
-    if ";" in cleaned_sql[:-1]:
+def detect_multi_statement(sql: str) -> Tuple[bool, str]:
+    cleaned = sql.strip()
+    if ";" in cleaned:
         return False, "Multiple SQL statements are not allowed."
+    return True, ""
 
-    return True, "SQL validated successfully."
+
+def apply_limit_if_missing(sql: str, row_limit: int | None = None) -> str:
+    row_limit = row_limit or settings.SQL_ROW_LIMIT
+    lowered = sql.lower()
+
+    if re.search(r"\blimit\s+\d+\b", lowered):
+        return sql
+
+    return f"{sql} LIMIT {row_limit}"
+
+
+def validate_sql(sql: str) -> Tuple[bool, str, str]:
+    sql = normalize_sql(sql)
+
+    ok, msg = enforce_select_only(sql)
+    if not ok:
+        return False, msg, sql
+
+    ok, msg = detect_multi_statement(sql)
+    if not ok:
+        return False, msg, sql
+
+    banned, keyword = contains_banned_keyword(sql)
+    if banned:
+        return False, f"Disallowed SQL keyword detected: {keyword}", sql
+
+    sql = apply_limit_if_missing(sql)
+    return True, "SQL is valid.", sql
