@@ -20,6 +20,7 @@ if "last_response" not in st.session_state:
 if "last_question" not in st.session_state:
     st.session_state.last_question = ""
 
+session_id = st.session_state.session_id
 
 # --------------------------------------------------
 # STYLES
@@ -34,7 +35,6 @@ button {
 </style>
 """, unsafe_allow_html=True)
 
-
 # --------------------------------------------------
 # SIDEBAR
 # --------------------------------------------------
@@ -42,9 +42,8 @@ button {
 st.sidebar.title("CGI AI Copilot")
 page = st.sidebar.radio("Navigation", ["Home (Chat)", "Admin Console"])
 
-
 # ==================================================
-# 🟣 TAB B — USER CHAT
+# 🟣 CHAT
 # ==================================================
 
 if page == "Home (Chat)":
@@ -63,7 +62,7 @@ if page == "Home (Chat)":
                 f"{API_URL}/query",
                 json={
                     "question": question,
-                    "session_id": st.session_state.session_id
+                    "session_id": session_id
                 }
             ).json()
 
@@ -73,9 +72,6 @@ if page == "Home (Chat)":
 
     if response:
 
-        # -----------------------------
-        # Clarification
-        # -----------------------------
         if response.get("needs_clarification"):
             st.warning(response["clarification_question"])
 
@@ -85,7 +81,7 @@ if page == "Home (Chat)":
             st.write(response["question"])
 
             # -----------------------------
-            # Confidence + Alert
+            # Confidence
             # -----------------------------
             confidence = response.get("confidence", 0)
 
@@ -93,7 +89,7 @@ if page == "Home (Chat)":
             st.caption(f"Confidence Score: {round(confidence, 2)}")
 
             if confidence < 0.6:
-                st.error("⚠️ Low confidence response — verify results or refine query.")
+                st.error("⚠️ Low confidence — verify results")
 
             # -----------------------------
             # SQL
@@ -102,7 +98,7 @@ if page == "Home (Chat)":
                 st.code(response["sql"])
 
             # -----------------------------
-            # Table
+            # Results
             # -----------------------------
             df = pd.DataFrame(
                 response["result"]["rows"],
@@ -141,7 +137,7 @@ if page == "Home (Chat)":
                 if st.button(q, key=f"follow_{i}"):
                     st.session_state.last_question = q
                     st.session_state.last_response = None
-                    st.experimental_rerun()
+                    st.rerun()
 
             # -----------------------------
             # Feedback
@@ -155,7 +151,7 @@ if page == "Home (Chat)":
                     f"{API_URL}/feedback",
                     json={
                         "request_id": response["request_id"],
-                        "session_id": st.session_state.session_id,
+                        "session_id": session_id,
                         "question": response["question"],
                         "sql": response["sql"],
                         "plan": response["plan"],
@@ -175,103 +171,133 @@ if page == "Home (Chat)":
                     st.warning("Feedback recorded")
 
             # -----------------------------
-            # ⭐ Promote to Golden Query
+            # Golden Query
             # -----------------------------
             st.subheader("Promote to Golden Query")
 
             if st.button("⭐ Approve as Golden Query"):
-                send_feedback("correct")
-                st.success("Added to Golden Queries ✅")
 
+                payload = {
+                    "request_id": response["request_id"],
+                    "session_id": session_id,
+                    "question": response["question"],
+                    "sql": response["sql"],
+                    "plan": response["plan"],
+                    "rating": "correct",
+                    "comments": "Manual golden",
+                    "route": response["route"],
+                }
+
+                res = requests.post(f"{API_URL}/feedback", json=payload)
+
+                if res.status_code == 200:
+                    st.success("Added to Golden Queries ✅")
+                else:
+                    st.error(res.text)
 
 # ==================================================
-# 🔵 TAB A — ADMIN CONSOLE
+# 🔵 ADMIN CONSOLE (UPGRADED)
 # ==================================================
 
 elif page == "Admin Console":
 
-    st.title("Admin Console")
+    st.title("📊 AI Performance Dashboard")
 
     # -----------------------------
-    # Metrics
+    # Load Data
     # -----------------------------
-    st.subheader("System Metrics")
-
-    metrics = requests.get(f"{API_URL}/metrics").json()
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Queries", metrics["total_queries"])
-    col2.metric("Success Rate", metrics["success_rate"])
-    col3.metric("Avg Latency", metrics["avg_latency"])
-
-    st.divider()
-
-    # -----------------------------
-    # Feedback
-    # -----------------------------
-    st.subheader("User Feedback")
-
     feedback = requests.get(f"{API_URL}/feedback").json()["items"]
 
-    if feedback:
-        df_feedback = pd.DataFrame(feedback)
-        st.dataframe(df_feedback)
+    if not feedback:
+        st.warning("No feedback yet")
+        st.stop()
 
-        if "confidence" in df_feedback.columns:
+    df = pd.DataFrame(feedback)
 
-            st.subheader("Confidence Monitoring")
+    # -----------------------------
+    # Extract confidence safely
+    # -----------------------------
+    def extract_conf(plan):
+        if isinstance(plan, dict):
+            return plan.get("confidence", 0)
+        return 0
 
-            avg_conf = df_feedback["confidence"].mean()
-            st.metric("Average Confidence", round(avg_conf, 2))
+    df["confidence"] = df["plan"].apply(extract_conf)
+    df["is_correct"] = df["rating"].apply(lambda x: 1 if x == "correct" else 0)
 
-            st.line_chart(df_feedback["confidence"])
+    # -----------------------------
+    # KPIs
+    # -----------------------------
+    st.subheader("📈 Summary")
 
-            st.subheader("Low Confidence Queries (<0.6)")
-            low_conf = df_feedback[df_feedback["confidence"] < 0.6]
+    col1, col2, col3 = st.columns(3)
 
-            if not low_conf.empty:
-                st.dataframe(low_conf)
-            else:
-                st.success("No low confidence queries 🎉")
+    col1.metric("Total Queries", len(df))
+    col2.metric("Accuracy", f"{df['is_correct'].mean():.2%}")
+    col3.metric("Avg Confidence", f"{df['confidence'].mean():.2f}")
+
+    # -----------------------------
+    # Scatter Chart
+    # -----------------------------
+    st.subheader("📊 Confidence vs Accuracy")
+
+    chart_df = df[["confidence", "is_correct"]]
+    chart_df.columns = ["x", "y"]
+
+    st.scatter_chart(chart_df)
+
+    # -----------------------------
+    # Risk Detection
+    # -----------------------------
+    st.subheader("🚨 Risky Queries (Low Confidence)")
+
+    risky = df[df["confidence"] < 0.7]
+
+    if not risky.empty:
+        st.dataframe(risky[["question", "confidence", "rating"]])
+    else:
+        st.success("No risky queries 🎉")
+
+    # -----------------------------
+    # Recent Feedback
+    # -----------------------------
+    st.subheader("🧾 Recent Feedback")
+    st.dataframe(df.sort_values(by="timestamp_utc", ascending=False).head(20))
 
     st.divider()
 
     # -----------------------------
-    # Failures + Replay
+    # Failures
     # -----------------------------
-    st.subheader("Failure Cases")
+    st.subheader("❌ Failure Cases")
 
     failures = requests.get(f"{API_URL}/failures").json()["items"]
 
-    if failures:
-        df_fail = pd.DataFrame(failures)
+    for i, row in enumerate(failures):
 
-        for i, row in df_fail.iterrows():
+        with st.expander(row.get("question", "Failure")):
 
-            with st.expander(f"❌ {row.get('question')}"):
+            st.write("Error:", row.get("error"))
+            st.code(row.get("sql", ""))
 
-                st.write("Error:", row.get("error"))
-                st.code(row.get("sql", ""))
+            if st.button(f"Replay Failure {i}"):
 
-                if st.button(f"Replay Query {i}"):
+                replay = requests.post(
+                    f"{API_URL}/query",
+                    json={
+                        "question": row.get("question"),
+                        "session_id": session_id
+                    }
+                ).json()
 
-                    replay = requests.post(
-                        f"{API_URL}/query",
-                        json={
-                            "question": row.get("question"),
-                            "session_id": st.session_state.session_id
-                        }
-                    ).json()
-
-                    st.subheader("Replay Result")
-                    st.json(replay)
+                st.json(replay)
 
     st.divider()
 
     # -----------------------------
-    # Golden Queries + Replay
+    # Golden Queries
     # -----------------------------
-    st.subheader("Golden Queries")
+    st.subheader("⭐ Golden Queries")
 
     goldens = requests.get(f"{API_URL}/golden-queries").json()["items"]
 
@@ -287,7 +313,7 @@ elif page == "Admin Console":
                     f"{API_URL}/query",
                     json={
                         "question": g["question"],
-                        "session_id": st.session_state.session_id
+                        "session_id": session_id
                     }
                 ).json()
 

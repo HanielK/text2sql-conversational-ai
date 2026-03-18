@@ -1,0 +1,177 @@
+[
+  {
+    "id": 1,
+    "timestamp_utc": "2026-03-18T16:49:27.800501+00:00",
+    "request_id": "4455fc80-f5ec-481f-8d76-8961a2bf1383",
+    "session_id": "64d39be0-1984-41fe-9df9-5d74706645a3",
+    "question": "total revenue in January 2024",
+    "sql": "SELECT SUM(total_amount) AS total_revenue_january_2024 FROM orders WHERE order_date >= '2024-01-01' AND order_date <= '2024-01-31' LIMIT 100",
+    "plan": {
+      "intent": "aggregation",
+      "tables_needed": [
+        "orders"
+      ],
+      "columns_needed": [
+        "total_amount",
+        "order_date"
+      ],
+      "joins_needed": [],
+      "filters": [
+        "Filter orders where order_date is between 2024-01-01 and 2024-01-31 inclusive"
+      ],
+      "aggregations": [
+        "sum(total_amount)"
+      ],
+      "grouping": [],
+      "sorting": [],
+      "time_grain": "month",
+      "limit": 100,
+      "ambiguities": [],
+      "reasoning_summary": "The question asks for total revenue in January 2024, which corresponds to summing the total_amount from orders placed in that month. Only the orders table is needed, filtered by order_date within January 2024."
+    },
+    "rating": "correct",
+    "comments": "",
+    "route": "sql",
+    "confidence": null
+  },
+  {
+    "id": 2,
+    "timestamp_utc": "2026-03-18T16:57:44.743480+00:00",
+    "request_id": "4455fc80-f5ec-481f-8d76-8961a2bf1383",
+    "session_id": "64d39be0-1984-41fe-9df9-5d74706645a3",
+    "question": "total revenue in January 2024",
+    "sql": "SELECT SUM(total_amount) AS total_revenue_january_2024 FROM orders WHERE order_date >= '2024-01-01' AND order_date <= '2024-01-31' LIMIT 100",
+    "plan": {
+      "intent": "aggregation",
+      "tables_needed": [
+        "orders"
+      ],
+      "columns_needed": [
+        "total_amount",
+        "order_date"
+      ],
+      "joins_needed": [],
+      "filters": [
+        "Filter orders where order_date is between 2024-01-01 and 2024-01-31 inclusive"
+      ],
+      "aggregations": [
+        "sum(total_amount)"
+      ],
+      "grouping": [],
+      "sorting": [],
+      "time_grain": "month",
+      "limit": 100,
+      "ambiguities": [],
+      "reasoning_summary": "The question asks for total revenue in January 2024, which corresponds to summing the total_amount from orders placed in that month. Only the orders table is needed, filtered by order_date within January 2024."
+    },
+    "rating": "correct",
+    "comments": "",
+    "route": "sql",
+    "confidence": null
+  },
+  {
+    "id": 3,
+    "timestamp_utc": "2026-03-18T17:09:48.162110+00:00",
+    "request_id": "4455fc80-f5ec-481f-8d76-8961a2bf1383",
+    "session_id": "64d39be0-1984-41fe-9df9-5d74706645a3",
+    "question": "total revenue in January 2024",
+    "sql": "SELECT SUM(total_amount) AS total_revenue_january_2024 FROM orders WHERE order_date >= '2024-01-01' AND order_date <= '2024-01-31' LIMIT 100",
+    "plan": {
+      "intent": "aggregation",
+      "tables_needed": [
+        "orders"
+      ],
+      "columns_needed": [
+        "total_amount",
+        "order_date"
+      ],
+      "joins_needed": [],
+      "filters": [
+        "Filter orders where order_date is between 2024-01-01 and 2024-01-31 inclusive"
+      ],
+      "aggregations": [
+        "sum(total_amount)"
+      ],
+      "grouping": [],
+      "sorting": [],
+      "time_grain": "month",
+      "limit": 100,
+      "ambiguities": [],
+      "reasoning_summary": "The question asks for total revenue in January 2024, which corresponds to summing the total_amount from orders placed in that month. Only the orders table is needed, filtered by order_date within January 2024."
+    },
+    "rating": "correct",
+    "comments": "",
+    "route": "sql",
+    "confidence": null
+  },
+  {
+    "id": 4,
+    "timestamp_utc": "2026-03-18T17:13:57.021540+00:00",
+    "request_id": "4455fc80-f5ec-481f-8d76-8961a2bf1383",
+    "session_id": "64d39be0-1984-41fe-9df9-5d74706645a3",
+    "question": "total revenue in January 2024",
+    "sql": "SELECT SUM(total_amount) AS total_revenue_january_2024 FROM orders WHERE order_date >= '2024-01-01' AND order_date <= '2024-01-31' LIMIT 100",
+    "plan": {
+      "intent": "aggregation",
+      "tables_needed": [
+        "orders"
+      ],
+      "columns_needed": [
+        "total_amount",
+        "order_date"
+      ],
+      "joins_needed": [],
+      "filters": [
+        "Filter orders where order_date is between 2024-01-01 and 2024-01-31 inclusive"
+      ],
+      "aggregations": [
+        "sum(total_amount)"
+      ],
+      "grouping": [],
+      "sorting": [],
+      "time_grain": "month",
+      "limit": 100,
+      "ambiguities": [],
+      "reasoning_summary": "The question asks for total revenue in January 2024, which corresponds to summing the total_amount from orders placed in that month. Only the orders table is needed, filtered by order_date within January 2024."
+    },
+    "rating": "correct",
+    "comments": "",
+    "route": "sql",
+    "confidence": null
+  },
+  {
+    "id": 5,
+    "timestamp_utc": "2026-03-18T17:30:15.475637+00:00",
+    "request_id": "8c45f50c-f6d0-418c-bbf8-a693fa82b027",
+    "session_id": "b6b24916-6821-4753-9ae2-c20c0e23287b",
+    "question": "total revenue in January 2024",
+    "sql": "SELECT SUM(total_amount) AS total_revenue_january_2024 FROM orders WHERE order_date >= '2024-01-01' AND order_date <= '2024-01-31' LIMIT 100",
+    "plan": {
+      "intent": "aggregation",
+      "tables_needed": [
+        "orders"
+      ],
+      "columns_needed": [
+        "total_amount",
+        "order_date"
+      ],
+      "joins_needed": [],
+      "filters": [
+        "Filter orders where order_date is between 2024-01-01 and 2024-01-31 inclusive"
+      ],
+      "aggregations": [
+        "sum(total_amount)"
+      ],
+      "grouping": [],
+      "sorting": [],
+      "time_grain": "month",
+      "limit": 100,
+      "ambiguities": [],
+      "reasoning_summary": "The question asks for total revenue in January 2024, which corresponds to summing the total_amount from orders placed in that month. Only the orders table is needed, filtered by order_date within January 2024."
+    },
+    "rating": "correct",
+    "comments": "Manually promoted to golden",
+    "route": "sql",
+    "confidence": null
+  }
+]

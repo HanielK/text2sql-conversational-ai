@@ -19,7 +19,7 @@ if not OPENAI_API_KEY:
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ---------------------------------------------------------
-# Generate embedding
+# Generate embedding (kept for future use)
 # ---------------------------------------------------------
 
 def get_embedding(text: str):
@@ -31,50 +31,44 @@ def get_embedding(text: str):
 
 
 # ---------------------------------------------------------
-# Retrieve relevant tables (schema-level)
+# 🔥 NEW: Dynamic schema retrieval (PRODUCTION-READY)
 # ---------------------------------------------------------
 
 def retrieve_relevant_schema(question: str, top_k: int = 3):
-    embedding = get_embedding(question)
+    """
+    Dynamically pulls schema from Supabase (Postgres)
+    Ignores embeddings for now to guarantee correctness
+    """
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-
-            cur.execute(
-                """
-                SELECT table_name, schema_text
-                FROM schema_embeddings
-                ORDER BY embedding <-> %s::vector
-                LIMIT %s
-                """,
-                (embedding, top_k)
-            )
-
+            cur.execute("""
+                SELECT table_name, column_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                ORDER BY table_name, ordinal_position
+            """)
             rows = cur.fetchall()
 
-    return rows
+    schema = {}
+
+    for table, column, dtype in rows:
+        schema.setdefault(table, []).append(f"{column} ({dtype})")
+
+    schema_text = "\nDATABASE SCHEMA:\n"
+
+    for table, columns in schema.items():
+        schema_text += f"\nTable: {table}\n"
+        for col in columns:
+            schema_text += f"  - {col}\n"
+
+    return schema_text
 
 
 # ---------------------------------------------------------
-# Retrieve relevant columns (column-level)
+# 🔥 TEMP: Disable column embeddings (simplifies debugging)
 # ---------------------------------------------------------
 
 def retrieve_relevant_columns(question: str, top_k: int = 8):
-    embedding = get_embedding(question)
+    return ""
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-
-            cur.execute(
-                """
-                SELECT table_name, column_name
-                FROM column_embeddings
-                ORDER BY embedding <-> %s::vector
-                LIMIT %s
-                """,
-                (embedding, top_k)
-            )
-
-            rows = cur.fetchall()
-
-    return rows
