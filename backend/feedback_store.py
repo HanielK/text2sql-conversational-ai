@@ -11,13 +11,18 @@ FEEDBACK_FILE = DATA_DIR / "feedback.json"
 FAILURES_FILE = DATA_DIR / "failures.json"
 
 
+# --------------------------------------------------
+# Helpers
+# --------------------------------------------------
+
 def _read_json_list(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
 
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            return data if isinstance(data, list) else []
     except Exception:
         return []
 
@@ -26,6 +31,10 @@ def _write_json_list(path: Path, items: list[dict[str, Any]]) -> None:
     with open(path, "w", encoding="utf-8") as f:
         json.dump(items, f, indent=2)
 
+
+# --------------------------------------------------
+# Feedback (UPDATED 🔥)
+# --------------------------------------------------
 
 def save_feedback(
     request_id: str,
@@ -36,8 +45,14 @@ def save_feedback(
     rating: str,
     comments: str = "",
     route: str = "sql",
+    confidence: float | None = None,  # 🔥 NEW
 ) -> dict[str, Any]:
+
     items = _read_json_list(FEEDBACK_FILE)
+
+    # 🔥 fallback: try extracting confidence from plan if not passed
+    if confidence is None and isinstance(plan, dict):
+        confidence = plan.get("confidence")
 
     record = {
         "id": len(items) + 1,
@@ -46,16 +61,22 @@ def save_feedback(
         "session_id": session_id,
         "question": question,
         "sql": sql,
-        "plan": plan,
+        "plan": plan or {},
         "rating": rating,
         "comments": comments,
         "route": route,
+        "confidence": confidence,  # 🔥 NEW FIELD
     }
 
     items.append(record)
     _write_json_list(FEEDBACK_FILE, items)
+
     return record
 
+
+# --------------------------------------------------
+# Failure Tracking
+# --------------------------------------------------
 
 def save_failure_case(
     request_id: str,
@@ -66,6 +87,7 @@ def save_failure_case(
     sql: str = "",
     plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+
     items = _read_json_list(FAILURES_FILE)
 
     record = {
@@ -82,8 +104,13 @@ def save_failure_case(
 
     items.append(record)
     _write_json_list(FAILURES_FILE, items)
+
     return record
 
+
+# --------------------------------------------------
+# Getters
+# --------------------------------------------------
 
 def list_feedback() -> list[dict[str, Any]]:
     return _read_json_list(FEEDBACK_FILE)
@@ -91,3 +118,4 @@ def list_feedback() -> list[dict[str, Any]]:
 
 def list_failures() -> list[dict[str, Any]]:
     return _read_json_list(FAILURES_FILE)
+

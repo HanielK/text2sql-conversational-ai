@@ -13,14 +13,10 @@ from backend.document_rag import answer_from_docs, retrieve_relevant_docs
 from backend.pipeline import run_text_to_sql_pipeline
 from backend.feedback_store import save_feedback, list_feedback, list_failures
 from backend.golden_queries import add_golden_query, list_golden_queries
-from backend.conversation_memory import (
-    add_interaction,
-    get_last_interaction
-)
+from backend.conversation_memory import add_interaction, get_last_interaction
+from backend.query_analyzer import analyze_follow_up
+from backend.response_builder import build_structured_response
 
-# -----------------------------------------------------
-# Load environment variables
-# -----------------------------------------------------
 
 env_path = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(env_path, override=True)
@@ -51,25 +47,12 @@ class FeedbackRequest(BaseModel):
     rating: str
     comments: str = ""
     route: str = "sql"
+    confidence: float | None = None  # 🔥 NEW
 
 
 # -----------------------------------------------------
 # Helpers
 # -----------------------------------------------------
-
-def detect_chart(columns, rows):
-    if not rows or len(columns) < 2:
-        return None
-
-    if isinstance(rows[0][1], (int, float)):
-        return {
-            "chart_type": "bar",
-            "x": columns[0],
-            "y": columns[1]
-        }
-
-    return None
-
 
 def log_metric(session_id, question, route, success, execution_time):
     try:
@@ -88,39 +71,30 @@ def log_metric(session_id, question, route, success, execution_time):
         print("Metric logging failed:", str(e))
 
 
-# ---------------- FOLLOW-UP DETECTION ----------------
-
-def is_follow_up_question(question: str) -> bool:
-    follow_up_phrases = [
-        "now", "instead", "also", "same", "previous",
-        "that", "those", "it", "filter", "change", "update"
-    ]
-
-    q = question.lower()
-    return any(q.startswith(p) or f" {p} " in q for p in follow_up_phrases)
-
-
-def enrich_with_context(question: str, session_id: str) -> str:
+def maybe_enrich_follow_up(question: str, session_id: str) -> tuple[str, dict]:
     last = get_last_interaction(session_id)
 
     if not last:
-        return question
+        return question, {
+            "is_follow_up": False,
+            "standalone_question": question,
+            "reasoning_summary": "No prior interaction found.",
+        }
 
-    return f"""
-Previous question: {last['rewritten_question']}
+    analysis = analyze_follow_up(
+        new_question=question,
+        previous_question=last.get("question", ""),
+        previous_rewritten_question=last.get("rewritten_question", ""),
+        previous_sql=last.get("sql", ""),
+        previous_plan=last.get("plan", {}),
+    )
 
-Previous SQL logic:
-{last['sql']}
-
-Follow-up question:
-{question}
-
-Rewrite this into a complete standalone question.
-"""
+    standalone_question = analysis.get("standalone_question", question)
+    return standalone_question, analysis
 
 
 # -----------------------------------------------------
-# Metrics Endpoint
+# Metrics
 # -----------------------------------------------------
 
 @app.get("/metrics")
@@ -146,7 +120,7 @@ def get_metrics():
 
 
 # -----------------------------------------------------
-# MAIN QUERY ENDPOINT
+# MAIN QUERY
 # -----------------------------------------------------
 
 @app.post("/query")
@@ -157,47 +131,73 @@ def query_ai(payload: QueryRequest):
     if not original_question:
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
 
-    # -------- STEP 4: Follow-up handling --------
-    question = original_question
-
-    if is_follow_up_question(original_question):
-        question = enrich_with_context(original_question, session_id)
-
     start_time = time.time()
-    routed_guess = route_question(question)
+
+    enriched_question, follow_up_analysis = maybe_enrich_follow_up(original_question, session_id)
+    routed_guess = route_question(enriched_question)
 
     # ---------------- DOC ----------------
     if routed_guess == "doc":
-        doc_result = answer_from_docs(question)
+        doc_result = answer_from_docs(enriched_question)
+
         elapsed = time.time() - start_time
         log_metric(session_id, original_question, "doc", True, elapsed)
 
-        return {
+        response = {
+            "success": True,
             "route": "doc",
             "question": original_question,
-            "reasoning": doc_result["reasoning"],
-            "columns": ["answer"],
-            "rows": [[doc_result["answer"]]],
+            "rewritten_question": enriched_question,
+            "confidence": 1.0,
+            "analysis": {"follow_up_analysis": follow_up_analysis},
+            "plan": {},
+            "sql": "",
+            "result": {
+                "type": "text",
+                "columns": ["answer"],
+                "rows": [[doc_result["answer"]]],
+                "row_count": 1,
+            },
+            "chart": None,
+            "insights": doc_result["reasoning"],
+            "follow_ups": [
+                "Can you show the relevant policy section?",
+                "Can you summarize the key rules?",
+                "Are there any exceptions mentioned?",
+            ],
             "sources": doc_result["sources"],
-            "chart": None
+            "request_id": "",
         }
+
+        add_interaction(
+            session_id=session_id,
+            question=original_question,
+            rewritten_question=enriched_question,
+            sql="",
+            plan={},
+            route="doc",
+        )
+
+        return response
 
     # ---------------- SQL / HYBRID ----------------
     if routed_guess in {"sql", "hybrid"}:
-        pipeline_result = run_text_to_sql_pipeline(question, session_id=session_id)
+        pipeline_result = run_text_to_sql_pipeline(enriched_question, session_id=session_id)
 
-        # ---- Clarification ----
         if pipeline_result.get("needs_clarification"):
             return {
                 "success": False,
                 "needs_clarification": True,
                 "request_id": pipeline_result["request_id"],
-                "route": pipeline_result.get("route"),
-                "confidence": pipeline_result.get("confidence"),
+                "route": pipeline_result.get("route", routed_guess),
+                "confidence": pipeline_result.get("confidence", 0.0),
                 "question": original_question,
-                "rewritten_question": pipeline_result.get("rewritten_question"),
-                "clarification_question": pipeline_result.get("clarification_question"),
-                "analysis": pipeline_result.get("analysis"),
+                "rewritten_question": pipeline_result.get("rewritten_question", enriched_question),
+                "clarification_question": pipeline_result.get("clarification_question", ""),
+                "analysis": {
+                    **pipeline_result.get("analysis", {}),
+                    "follow_up_analysis": follow_up_analysis,
+                },
             }
 
         if not pipeline_result["success"]:
@@ -206,18 +206,21 @@ def query_ai(payload: QueryRequest):
         final_route = pipeline_result.get("route", routed_guess)
         sql = pipeline_result["safe_sql"]
         plan = pipeline_result["plan"]
-        rewritten_question = pipeline_result.get("rewritten_question", question)
+        rewritten_question = pipeline_result.get("rewritten_question", enriched_question)
         confidence = pipeline_result.get("confidence", 0.0)
 
         execution = execute_sql(sql)
-        elapsed = time.time() - start_time
 
         if not execution["success"]:
             raise HTTPException(status_code=500, detail=execution["error"])
 
-        chart = detect_chart(execution["columns"], execution["rows"])
+        sources = []
 
-        # -------- SAVE MEMORY --------
+        if final_route == "hybrid":
+            doc_rows = retrieve_relevant_docs(original_question, top_k=3)
+            sources = [row[0] for row in doc_rows]
+
+        # SAVE MEMORY
         add_interaction(
             session_id=session_id,
             question=original_question,
@@ -227,46 +230,86 @@ def query_ai(payload: QueryRequest):
             route=final_route,
         )
 
+        # LOG METRICS
+        elapsed = time.time() - start_time
         log_metric(session_id, original_question, final_route, True, elapsed)
 
-        return {
-            "route": final_route,
-            "question": original_question,
-            "rewritten_question": rewritten_question,
-            "confidence": confidence,
-            "plan": plan,
-            "sql": sql,
-            "columns": execution["columns"],
-            "rows": execution["rows"],
-            "chart": chart,
-            "request_id": pipeline_result["request_id"]
-        }
+        return build_structured_response(
+            route=final_route,
+            original_question=original_question,
+            rewritten_question=rewritten_question,
+            confidence=confidence,
+            analysis={"follow_up_analysis": follow_up_analysis},
+            plan=plan,
+            sql=sql,
+            columns=execution["columns"],
+            rows=execution["rows"],
+            request_id=pipeline_result["request_id"],
+            sources=sources,
+        )
 
     raise HTTPException(status_code=500, detail="Unable to route question.")
 
 
 # -----------------------------------------------------
-# FEEDBACK ENDPOINT
+# FEEDBACK + AUTO PROMOTE 🔥
 # -----------------------------------------------------
 
 @app.post("/feedback")
 def submit_feedback(payload: FeedbackRequest):
-    record = save_feedback(**payload.dict())
 
+    if payload.rating not in {"correct", "incorrect"}:
+        raise HTTPException(status_code=400, detail="rating must be 'correct' or 'incorrect'.")
+
+    # 🔥 FIX: use explicit confidence or fallback
+    confidence = payload.confidence
+
+    record = save_feedback(
+        request_id=payload.request_id,
+        session_id=payload.session_id,
+        question=payload.question,
+        sql=payload.sql,
+        plan=payload.plan,
+        rating=payload.rating,
+        comments=payload.comments,
+        route=payload.route,
+        confidence=confidence,
+    )
+
+    # ---------------- AUTO PROMOTE ----------------
     if payload.rating == "correct" and payload.sql:
-        golden = add_golden_query(
-            question=payload.question,
-            sql=payload.sql,
-            plan=payload.plan,
-            tables_used=payload.plan.get("tables_needed", []),
-        )
-        return {
-            "success": True,
-            "golden_query_added": True,
-            "golden_query": golden,
-        }
 
-    return {"success": True}
+        feedback_items = list_feedback()
+
+        success_count = sum(
+            1 for f in feedback_items
+            if f["question"] == payload.question and f["rating"] == "correct"
+        )
+
+        existing_goldens = list_golden_queries()
+
+        already_exists = any(g["question"] == payload.question for g in existing_goldens)
+
+        if success_count >= 3 and not already_exists:
+
+            golden = add_golden_query(
+                question=payload.question,
+                sql=payload.sql,
+                plan=payload.plan,
+                tables_used=payload.plan.get("tables_needed", []),
+            )
+
+            return {
+                "success": True,
+                "auto_promoted": True,
+                "count": success_count,
+                "golden_query": golden,
+            }
+
+    return {
+        "success": True,
+        "auto_promoted": False,
+    }
 
 
 # -----------------------------------------------------
