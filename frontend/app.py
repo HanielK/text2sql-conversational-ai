@@ -7,6 +7,25 @@ API_URL = "http://localhost:8000"
 
 st.set_page_config(layout="wide")
 
+
+# --------------------------------------------------
+# LOGO (TOP CENTERED)
+# --------------------------------------------------
+
+import base64
+
+with open("frontend/assets/kairo_logo_beta.png", "rb") as img_file:
+    encoded = base64.b64encode(img_file.read()).decode()
+
+st.markdown(
+    f"""
+    <div style="text-align: center; margin-bottom: 5px;">
+        <img src="data:image/png;base64,{encoded}" width="440">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
 # --------------------------------------------------
 # SESSION SETUP
 # --------------------------------------------------
@@ -39,7 +58,7 @@ button {
 # SIDEBAR
 # --------------------------------------------------
 
-st.sidebar.title("CGI AI Copilot")
+st.sidebar.title("Kairo Knowledge Agent")
 page = st.sidebar.radio("Navigation", ["Home (Chat)", "Admin Console"])
 
 # ==================================================
@@ -48,7 +67,7 @@ page = st.sidebar.radio("Navigation", ["Home (Chat)", "Admin Console"])
 
 if page == "Home (Chat)":
 
-    st.title("AI Orchestrator Chat")
+    st.title("Begin to Explore Your Data. Get Instant Insights!")
 
     question = st.text_input("Ask a question", value=st.session_state.last_question)
 
@@ -154,7 +173,10 @@ if page == "Home (Chat)":
                         "session_id": session_id,
                         "question": response["question"],
                         "sql": response["sql"],
-                        "plan": response["plan"],
+                        "plan": {
+                            **response["plan"],
+                            "confidence": response.get("confidence", 0)
+                        },
                         "rating": rating,
                         "route": response["route"]
                     }
@@ -213,6 +235,9 @@ elif page == "Admin Console":
         st.stop()
 
     df = pd.DataFrame(feedback)
+
+    # Keep only entries with confidence > 0
+    df = df[df["plan"].apply(lambda x: x.get("confidence", 0) > 0 if isinstance(x, dict) else False)]
 
     # -----------------------------
     # Extract confidence safely

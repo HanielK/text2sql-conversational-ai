@@ -173,5 +173,45 @@
     "comments": "Manually promoted to golden",
     "route": "sql",
     "confidence": null
+  },
+  {
+    "id": 6,
+    "timestamp_utc": "2026-03-18T20:20:17.560829+00:00",
+    "request_id": "3dad89f4-1c09-483a-b5a6-aabc99a7d885",
+    "session_id": "98cd2ed5-284d-4030-850c-3b94387d1e59",
+    "question": "show total revenue by month for 2024",
+    "sql": "SELECT DATE_TRUNC('month', order_date) AS month, SUM(total_amount) AS total_revenue FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2025-01-01' GROUP BY month ORDER BY month ASC LIMIT 100",
+    "plan": {
+      "intent": "aggregation",
+      "tables_needed": [
+        "orders"
+      ],
+      "columns_needed": [
+        "order_date",
+        "total_amount"
+      ],
+      "joins_needed": [],
+      "filters": [
+        "Filter orders to include only those with order_date in the year 2024"
+      ],
+      "aggregations": [
+        "sum(total_amount)"
+      ],
+      "grouping": [
+        "month(order_date)"
+      ],
+      "sorting": [
+        "month(order_date) asc"
+      ],
+      "time_grain": "month",
+      "limit": 100,
+      "ambiguities": [],
+      "reasoning_summary": "The question asks for total revenue grouped by month for 2024, which requires summing the total_amount from orders filtered by order_date in 2024 and grouping results by month.",
+      "confidence": 0.95
+    },
+    "rating": "correct",
+    "comments": "",
+    "route": "sql",
+    "confidence": 0.95
   }
 ]

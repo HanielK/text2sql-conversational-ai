@@ -269,11 +269,13 @@ def submit_feedback(payload: FeedbackRequest):
         session_id=payload.session_id,
         question=payload.question,
         sql=payload.sql,
-        plan=payload.plan,
+        plan={
+            **payload.plan,
+            "confidence": payload.plan.get("confidence", 0)
+        },
         rating=payload.rating,
         comments=payload.comments,
         route=payload.route,
-        confidence=confidence,
     )
 
     # ---------------- AUTO PROMOTE ----------------
