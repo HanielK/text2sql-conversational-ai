@@ -9,7 +9,21 @@ API_URL = "http://localhost:8000"
 st.set_page_config(layout="wide")
 
 # --------------------------------------------------
-# UI SPACING (BUTTONS)
+# APPLY PENDING INPUT (🔥 FIX)
+# MUST BE BEFORE WIDGETS
+# --------------------------------------------------
+
+if "pending_input" in st.session_state:
+    st.session_state.input_question = st.session_state.pending_input
+    st.session_state.last_response = None
+    del st.session_state.pending_input
+
+if "clear_input" in st.session_state and st.session_state.clear_input:
+    st.session_state.input_question = ""
+    st.session_state.clear_input = False
+
+# --------------------------------------------------
+# UI SPACING
 # --------------------------------------------------
 
 st.markdown("""
@@ -25,7 +39,7 @@ div.row-widget.stHorizontal > div {
 """, unsafe_allow_html=True)
 
 # --------------------------------------------------
-# LOGO (TOP CENTERED)
+# LOGO
 # --------------------------------------------------
 
 with open("frontend/assets/kairo_logo_beta.png", "rb") as img_file:
@@ -50,11 +64,9 @@ if "session_id" not in st.session_state:
 if "last_response" not in st.session_state:
     st.session_state.last_response = None
 
-# 🔥 Input control (for text box)
 if "input_question" not in st.session_state:
     st.session_state.input_question = ""
 
-# 🔥 Safe reset flag (avoids Streamlit mutation error)
 if "clear_input" not in st.session_state:
     st.session_state.clear_input = False
 
@@ -88,14 +100,20 @@ if page == "Home (Chat)":
 
     st.title("Begin to Explore Your Data. Get Instant Insights!")
 
-    # 🔥 UPDATED INPUT
+    # --------------------------------------------------
+    # INPUT
+    # --------------------------------------------------
+
     question = st.text_input(
         "Ask a question",
         key="input_question",
         placeholder="e.g. total revenue last month, refund policy, top customers..."
     )
 
-    # 🔥 UPDATED SUBMIT LOGIC
+    # --------------------------------------------------
+    # SUBMIT
+    # --------------------------------------------------
+
     if st.button("Submit") and st.session_state.input_question:
 
         question = st.session_state.input_question
@@ -112,15 +130,16 @@ if page == "Home (Chat)":
 
             st.session_state.last_response = response
 
-        # 🔥 TRIGGER CLEAR ON NEXT RUN
+        # trigger clear on next run
         st.session_state.clear_input = True
 
         st.rerun()
 
-        # 🔥 CLEAR INPUT AFTER SUBMIT
-        st.session_state.input_question = ""
-
     response = st.session_state.last_response
+
+    # --------------------------------------------------
+    # RESPONSE
+    # --------------------------------------------------
 
     if response:
 
@@ -132,26 +151,19 @@ if page == "Home (Chat)":
             st.subheader("Question Asked")
             st.write(response["question"])
 
-            # -----------------------------
             # Confidence
-            # -----------------------------
             confidence = response.get("confidence", 0)
-
             st.progress(min(max(confidence, 0), 1))
             st.caption(f"Confidence Score: {round(confidence, 2)}")
 
             if confidence < 0.6:
                 st.error("⚠️ Low confidence — verify results")
 
-            # -----------------------------
             # SQL
-            # -----------------------------
             with st.expander("SQL Query"):
                 st.code(response["sql"])
 
-            # -----------------------------
             # Results
-            # -----------------------------
             df = pd.DataFrame(
                 response["result"]["rows"],
                 columns=response["result"]["columns"]
@@ -160,9 +172,7 @@ if page == "Home (Chat)":
             st.subheader("Query Results")
             st.dataframe(df)
 
-            # -----------------------------
             # Chart
-            # -----------------------------
             chart = response.get("chart")
 
             if chart:
@@ -174,28 +184,27 @@ if page == "Home (Chat)":
                 elif chart["chart_type"] == "line":
                     st.line_chart(df.set_index(chart["x"])[chart["y"]])
 
-            # -----------------------------
             # Insights
-            # -----------------------------
             st.subheader("Insights")
             st.info(response["insights"])
 
-            # -----------------------------
-            # Follow-ups
-            # -----------------------------
+            # --------------------------------------------------
+            # FOLLOW UPS (🔥 FIXED)
+            # --------------------------------------------------
+
             st.subheader("Follow-up Questions")
 
             for i, q in enumerate(response["follow_ups"]):
                 if st.button(q, key=f"follow_{i}"):
 
-                    # 🔥 AUTO-FILL INPUT
-                    st.session_state.input_question = q
-                    st.session_state.last_response = None
+                    # 🔥 SAFE pattern (no direct mutation)
+                    st.session_state.pending_input = q
                     st.rerun()
 
-            # -----------------------------
-            # Feedback
-            # -----------------------------
+            # --------------------------------------------------
+            # FEEDBACK
+            # --------------------------------------------------
+
             st.subheader("Was this helpful?")
 
             def send_feedback(rating):
@@ -215,7 +224,7 @@ if page == "Home (Chat)":
                     }
                 )
 
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns([1, 1, 8])  # 👈 key fix
 
             with col1:
                 if st.button("👍"):
@@ -227,9 +236,10 @@ if page == "Home (Chat)":
                     send_feedback("incorrect")
                     st.warning("Feedback recorded")
 
-            # -----------------------------
-            # Golden Query
-            # -----------------------------
+            # --------------------------------------------------
+            # GOLDEN QUERY
+            # --------------------------------------------------
+
             st.subheader("Promote to Golden Query")
 
             if st.button("⭐ Approve as Golden Query"):
@@ -245,7 +255,7 @@ if page == "Home (Chat)":
                     "route": response["route"],
                 }
 
-                res = requests.post(f"{API_URL}/feedback", json=payload)
+                res = requests.post(f"{API_URL}/golden-queries", json=payload)
 
                 if res.status_code == 200:
                     st.success("Added to Golden Queries ✅")

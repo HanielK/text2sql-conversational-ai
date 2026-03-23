@@ -313,7 +313,43 @@ def submit_feedback(payload: FeedbackRequest):
         "auto_promoted": False,
     }
 
+# -----------------------------------------------------
+# GOLDEN QUERY (MANUAL PROMOTION) 🔥
+# -----------------------------------------------------
 
+@app.post("/golden-queries")
+def save_golden_query(payload: dict):
+
+    if not payload.get("question") or not payload.get("sql"):
+        raise HTTPException(status_code=400, detail="question and sql are required")
+
+    existing = list_golden_queries()
+
+    # Prevent duplicates
+    already_exists = any(
+        g["question"] == payload["question"] for g in existing
+    )
+
+    if already_exists:
+        return {
+            "success": True,
+            "message": "Already exists in golden queries"
+        }
+
+    record = add_golden_query(
+        question=payload["question"],
+        sql=payload["sql"],
+        plan=payload.get("plan", {}),
+        tags=payload.get("tags", []),
+        tables_used=payload.get("tables_used", []),
+    )
+
+    print(f"🔥 MANUAL GOLDEN SAVED: {payload['question']}")
+
+    return {
+        "success": True,
+        "item": record
+    }
 # -----------------------------------------------------
 # ADMIN ENDPOINTS
 # -----------------------------------------------------

@@ -1,14 +1,24 @@
 from backend.db import get_connection
+from pathlib import Path
+import json
+
+
+# --------------------------------------------------
+# 🔥 MODE CONTROL
+# --------------------------------------------------
+PRO_MODE = False
+# False = FULL RESET (demo mode)
+# True  = KEEP learning data (prod mode)
+
 
 def reset_demo():
     with get_connection() as conn:
         with conn.cursor() as cur:
 
-            print("🧹 Resetting demo environment...")
+            print("🧹 Resetting environment...")
 
             # ----------------------------------
-            # Clear relational data (ORDER MATTERS)
-            # Child tables FIRST → then parent tables
+            # Clear relational data
             # ----------------------------------
             cur.execute("TRUNCATE order_items RESTART IDENTITY CASCADE;")
             cur.execute("TRUNCATE payments RESTART IDENTITY CASCADE;")
@@ -20,7 +30,7 @@ def reset_demo():
             print("✅ Cleared relational tables")
 
             # ----------------------------------
-            # Clear embeddings (AI memory)
+            # Clear embeddings
             # ----------------------------------
             cur.execute("DELETE FROM schema_embeddings;")
             cur.execute("DELETE FROM column_embeddings;")
@@ -37,21 +47,41 @@ def reset_demo():
             print("✅ Cleared logs & metrics")
 
             # ----------------------------------
-            # OPTIONAL (HIGHLY RECOMMENDED)
-            # Reset feedback + golden queries if applicable
+            # FILE STORAGE CONTROL (🔥 PRO MODE)
             # ----------------------------------
-            RESET_GOLDEN = True  # 👈 TOGGLE THIS
 
-            if RESET_GOLDEN:
-                try:
-                    cur.execute("DELETE FROM golden_queries;")
-                    print("✅ Cleared golden queries")
-                except Exception:
-                    print("ℹ️ golden_queries table not found (skipping)")
+            BASE_DIR = Path(__file__).resolve().parents[1]
+            DATA_DIR = BASE_DIR / "data"
+
+            feedback_file = DATA_DIR / "feedback" / "feedback.json"
+            golden_file = DATA_DIR / "golden_queries" / "golden_queries.json"
+
+            if PRO_MODE:
+                print("🟢 PRO MODE ENABLED → Preserving learning data")
+                print("   - feedback.json KEPT")
+                print("   - golden_queries.json KEPT")
+
             else:
-                print("ℹ️ Keeping golden queries (production mode)")
+                print("🧪 DEMO MODE → Resetting learning data")
 
-            print("🎯 Demo environment FULLY reset.")
+                # ---- Reset Feedback ----
+                if feedback_file.exists():
+                    with open(feedback_file, "w", encoding="utf-8") as f:
+                        json.dump([], f)
+                    print("✅ Cleared feedback.json")
+                else:
+                    print("ℹ️ feedback.json not found")
+
+                # ---- Reset Golden Queries ----
+                if golden_file.exists():
+                    with open(golden_file, "w", encoding="utf-8") as f:
+                        json.dump([], f)
+                    print("✅ Cleared golden_queries.json")
+                else:
+                    print("ℹ️ golden_queries.json not found")
+
+            print("🎯 Environment reset complete.")
+
 
 if __name__ == "__main__":
     reset_demo()

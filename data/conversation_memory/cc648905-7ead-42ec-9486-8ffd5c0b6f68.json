@@ -1,0 +1,12 @@
+{
+  "history": [
+    {
+      "timestamp": "2026-03-23T21:00:51.007198+00:00",
+      "question": "What is the refund policy?",
+      "rewritten_question": "What is the refund policy?",
+      "sql": "",
+      "plan": {},
+      "route": "doc"
+    }
+  ]
+}

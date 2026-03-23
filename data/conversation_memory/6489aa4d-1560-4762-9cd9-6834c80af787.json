@@ -1,0 +1,20 @@
+{
+  "history": [
+    {
+      "timestamp": "2026-03-23T21:06:16.434578+00:00",
+      "question": "What is the refund policy?",
+      "rewritten_question": "What is the refund policy?",
+      "sql": "",
+      "plan": {},
+      "route": "doc"
+    },
+    {
+      "timestamp": "2026-03-23T21:06:35.494148+00:00",
+      "question": "Are there any exceptions mentioned?",
+      "rewritten_question": "Are there any exceptions mentioned in the refund policy?",
+      "sql": "",
+      "plan": {},
+      "route": "doc"
+    }
+  ]
+}
