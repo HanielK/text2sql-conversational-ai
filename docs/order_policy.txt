@@ -1,0 +1,2 @@
+Orders can be cancelled within 24 hours of placement.
+Completed orders cannot be modified.
