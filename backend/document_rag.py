@@ -27,7 +27,11 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 # ---------------------------------------------------------
 
 def get_connection():
-    return psycopg.connect(DATABASE_URL, prepare_threshold=0)
+    return psycopg.connect(
+        DATABASE_URL,
+        autocommit=True,
+        prepare_threshold=None  # 🔥 DISABLE prepared statements (REQUIRED for Supabase)
+    )
 
 
 # ---------------------------------------------------------
