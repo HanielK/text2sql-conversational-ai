@@ -4,6 +4,10 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
 
+# ---------------------------------------------------------
+# Load environment variables
+# ---------------------------------------------------------
+
 env_path = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(env_path, override=True)
 
@@ -18,10 +22,17 @@ if not DATABASE_URL:
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
+# ---------------------------------------------------------
+# DB Connection
+# ---------------------------------------------------------
 
 def get_connection():
     return psycopg.connect(DATABASE_URL, prepare_threshold=0)
 
+
+# ---------------------------------------------------------
+# Embedding
+# ---------------------------------------------------------
 
 def get_embedding(text: str):
     response = client.embeddings.create(
@@ -31,44 +42,64 @@ def get_embedding(text: str):
     return response.data[0].embedding
 
 
-def retrieve_relevant_docs(question: str, top_k: int = 5):
+# ---------------------------------------------------------
+# Retrieve relevant documents (FIXED)
+# ---------------------------------------------------------
+
+def retrieve_relevant_docs(question: str, top_k: int = 3):
     embedding = get_embedding(question)
 
     with get_connection() as conn:
         with conn.cursor() as cur:
+
             cur.execute(
                 """
-                SELECT source_file, chunk_index, chunk_text
+                SELECT document_name, content
                 FROM document_embeddings
                 ORDER BY embedding <-> %s::vector
                 LIMIT %s
                 """,
                 (embedding, top_k)
             )
-            return cur.fetchall()
 
+            rows = cur.fetchall()
+
+    return rows
+
+
+# ---------------------------------------------------------
+# Answer from documents (FIXED + IMPROVED)
+# ---------------------------------------------------------
 
 def answer_from_docs(question: str, top_k: int = 5):
     doc_rows = retrieve_relevant_docs(question, top_k=top_k)
 
     if not doc_rows:
         return {
-            "reasoning": "No relevant document chunks were found.",
+            "reasoning": "No relevant documents found.",
             "sources": [],
             "answer": "I could not find relevant document context."
         }
 
+    # -----------------------------------------------------
+    # Build document context (FIXED for your schema)
+    # Add LIMIT 1000 characters to content length to avoid token bloat
+    # -----------------------------------------------------
     doc_context = "\n\n".join(
         [
-            f"[Source: {source_file} | Chunk: {chunk_index}]\n{chunk_text}"
-            for source_file, chunk_index, chunk_text in doc_rows
+            f"[Source: {document_name}]\n{content[:1000]}"
+            for document_name, content in doc_rows
         ]
     )
 
+    # -----------------------------------------------------
+    # Prompt
+    # -----------------------------------------------------
     prompt = f"""
 You are an enterprise knowledge assistant.
 
 Use ONLY the document context below to answer the question.
+If the answer is not in the context, say you don't know.
 
 DOCUMENT CONTEXT:
 {doc_context}
@@ -76,9 +107,12 @@ DOCUMENT CONTEXT:
 QUESTION:
 {question}
 
-Return a concise answer grounded in the provided document context.
+Return a concise, accurate answer grounded in the document context.
 """
 
+    # -----------------------------------------------------
+    # LLM call
+    # -----------------------------------------------------
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
@@ -87,8 +121,11 @@ Return a concise answer grounded in the provided document context.
 
     answer = response.choices[0].message.content.strip()
 
+    # -----------------------------------------------------
+    # Return structured response
+    # -----------------------------------------------------
     return {
-        "reasoning": "Answer generated from retrieved document chunks.",
-        "sources": [row[0] for row in doc_rows],
+        "reasoning": "Answer generated from retrieved documents.",
+        "sources": [row[0] for row in doc_rows],  # document_name
         "answer": answer
     }

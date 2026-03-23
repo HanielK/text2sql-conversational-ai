@@ -7,6 +7,18 @@ API_URL = "http://localhost:8000"
 
 st.set_page_config(layout="wide")
 
+st.markdown("""
+<style>
+div.stButton > button {
+    padding: 0.4rem 0.6rem;
+    margin: 0px;
+}
+div.row-widget.stHorizontal > div {
+    gap: 0.25rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
 
 # --------------------------------------------------
 # LOGO (TOP CENTERED)
@@ -181,6 +193,8 @@ if page == "Home (Chat)":
                         "route": response["route"]
                     }
                 )
+            
+            col1, col2 = st.columns(2)
 
             with col1:
                 if st.button("👍"):

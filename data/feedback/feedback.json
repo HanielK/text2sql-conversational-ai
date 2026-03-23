@@ -213,5 +213,44 @@
     "comments": "",
     "route": "sql",
     "confidence": 0.95
+  },
+  {
+    "id": 7,
+    "timestamp_utc": "2026-03-23T19:40:32.584215+00:00",
+    "request_id": "c41f7414-b5c0-4eb6-8362-b7fd60148492",
+    "session_id": "0e1a2b1e-a8d3-4fcb-b7d0-11f430178672",
+    "question": "What is the average order value for 2024 by customer?",
+    "sql": "SELECT customer_id, AVG(total_amount) AS average_order_value_2024 FROM orders WHERE order_date >= '2024-01-01' AND order_date <= '2024-12-31' GROUP BY customer_id LIMIT 100",
+    "plan": {
+      "intent": "aggregation",
+      "tables_needed": [
+        "orders"
+      ],
+      "columns_needed": [
+        "customer_id",
+        "total_amount",
+        "order_date"
+      ],
+      "joins_needed": [],
+      "filters": [
+        "Filter orders to only include those with order_date in the year 2024"
+      ],
+      "aggregations": [
+        "avg(total_amount)"
+      ],
+      "grouping": [
+        "customer_id"
+      ],
+      "sorting": [],
+      "time_grain": "year",
+      "limit": 100,
+      "ambiguities": [],
+      "reasoning_summary": "To find the average order value per customer in 2024, we only need the orders table filtered by order_date in 2024, then group by customer_id and calculate the average of total_amount.",
+      "confidence": 0.95
+    },
+    "rating": "correct",
+    "comments": "",
+    "route": "sql",
+    "confidence": 0.95
   }
 ]
