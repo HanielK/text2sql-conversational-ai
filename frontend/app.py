@@ -2,10 +2,15 @@ import streamlit as st
 import requests
 import pandas as pd
 import uuid
+import base64
 
 API_URL = "http://localhost:8000"
 
 st.set_page_config(layout="wide")
+
+# --------------------------------------------------
+# UI SPACING (BUTTONS)
+# --------------------------------------------------
 
 st.markdown("""
 <style>
@@ -19,12 +24,9 @@ div.row-widget.stHorizontal > div {
 </style>
 """, unsafe_allow_html=True)
 
-
 # --------------------------------------------------
 # LOGO (TOP CENTERED)
 # --------------------------------------------------
-
-import base64
 
 with open("frontend/assets/kairo_logo_beta.png", "rb") as img_file:
     encoded = base64.b64encode(img_file.read()).decode()
@@ -48,8 +50,13 @@ if "session_id" not in st.session_state:
 if "last_response" not in st.session_state:
     st.session_state.last_response = None
 
-if "last_question" not in st.session_state:
-    st.session_state.last_question = ""
+# 🔥 Input control (for text box)
+if "input_question" not in st.session_state:
+    st.session_state.input_question = ""
+
+# 🔥 Safe reset flag (avoids Streamlit mutation error)
+if "clear_input" not in st.session_state:
+    st.session_state.clear_input = False
 
 session_id = st.session_state.session_id
 
@@ -81,11 +88,17 @@ if page == "Home (Chat)":
 
     st.title("Begin to Explore Your Data. Get Instant Insights!")
 
-    question = st.text_input("Ask a question", value=st.session_state.last_question)
+    # 🔥 UPDATED INPUT
+    question = st.text_input(
+        "Ask a question",
+        key="input_question",
+        placeholder="e.g. total revenue last month, refund policy, top customers..."
+    )
 
-    if st.button("Submit") and question:
+    # 🔥 UPDATED SUBMIT LOGIC
+    if st.button("Submit") and st.session_state.input_question:
 
-        st.session_state.last_question = question
+        question = st.session_state.input_question
 
         with st.spinner("Processing your query..."):
 
@@ -98,6 +111,14 @@ if page == "Home (Chat)":
             ).json()
 
             st.session_state.last_response = response
+
+        # 🔥 TRIGGER CLEAR ON NEXT RUN
+        st.session_state.clear_input = True
+
+        st.rerun()
+
+        # 🔥 CLEAR INPUT AFTER SUBMIT
+        st.session_state.input_question = ""
 
     response = st.session_state.last_response
 
@@ -166,7 +187,9 @@ if page == "Home (Chat)":
 
             for i, q in enumerate(response["follow_ups"]):
                 if st.button(q, key=f"follow_{i}"):
-                    st.session_state.last_question = q
+
+                    # 🔥 AUTO-FILL INPUT
+                    st.session_state.input_question = q
                     st.session_state.last_response = None
                     st.rerun()
 
@@ -174,8 +197,6 @@ if page == "Home (Chat)":
             # Feedback
             # -----------------------------
             st.subheader("Was this helpful?")
-
-            col1, col2 = st.columns(2)
 
             def send_feedback(rating):
                 requests.post(
@@ -193,7 +214,7 @@ if page == "Home (Chat)":
                         "route": response["route"]
                     }
                 )
-            
+
             col1, col2 = st.columns(2)
 
             with col1:
@@ -232,16 +253,13 @@ if page == "Home (Chat)":
                     st.error(res.text)
 
 # ==================================================
-# 🔵 ADMIN CONSOLE (UPGRADED)
+# 🔵 ADMIN CONSOLE (UNCHANGED)
 # ==================================================
 
 elif page == "Admin Console":
 
     st.title("📊 AI Performance Dashboard")
 
-    # -----------------------------
-    # Load Data
-    # -----------------------------
     feedback = requests.get(f"{API_URL}/feedback").json()["items"]
 
     if not feedback:
@@ -250,12 +268,8 @@ elif page == "Admin Console":
 
     df = pd.DataFrame(feedback)
 
-    # Keep only entries with confidence > 0
     df = df[df["plan"].apply(lambda x: x.get("confidence", 0) > 0 if isinstance(x, dict) else False)]
 
-    # -----------------------------
-    # Extract confidence safely
-    # -----------------------------
     def extract_conf(plan):
         if isinstance(plan, dict):
             return plan.get("confidence", 0)
@@ -264,9 +278,6 @@ elif page == "Admin Console":
     df["confidence"] = df["plan"].apply(extract_conf)
     df["is_correct"] = df["rating"].apply(lambda x: 1 if x == "correct" else 0)
 
-    # -----------------------------
-    # KPIs
-    # -----------------------------
     st.subheader("📈 Summary")
 
     col1, col2, col3 = st.columns(3)
@@ -275,9 +286,6 @@ elif page == "Admin Console":
     col2.metric("Accuracy", f"{df['is_correct'].mean():.2%}")
     col3.metric("Avg Confidence", f"{df['confidence'].mean():.2f}")
 
-    # -----------------------------
-    # Scatter Chart
-    # -----------------------------
     st.subheader("📊 Confidence vs Accuracy")
 
     chart_df = df[["confidence", "is_correct"]]
@@ -285,9 +293,6 @@ elif page == "Admin Console":
 
     st.scatter_chart(chart_df)
 
-    # -----------------------------
-    # Risk Detection
-    # -----------------------------
     st.subheader("🚨 Risky Queries (Low Confidence)")
 
     risky = df[df["confidence"] < 0.7]
@@ -297,17 +302,11 @@ elif page == "Admin Console":
     else:
         st.success("No risky queries 🎉")
 
-    # -----------------------------
-    # Recent Feedback
-    # -----------------------------
     st.subheader("🧾 Recent Feedback")
     st.dataframe(df.sort_values(by="timestamp_utc", ascending=False).head(20))
 
     st.divider()
 
-    # -----------------------------
-    # Failures
-    # -----------------------------
     st.subheader("❌ Failure Cases")
 
     failures = requests.get(f"{API_URL}/failures").json()["items"]
@@ -333,9 +332,6 @@ elif page == "Admin Console":
 
     st.divider()
 
-    # -----------------------------
-    # Golden Queries
-    # -----------------------------
     st.subheader("⭐ Golden Queries")
 
     goldens = requests.get(f"{API_URL}/golden-queries").json()["items"]
