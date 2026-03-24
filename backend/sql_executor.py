@@ -3,9 +3,12 @@ import psycopg
 from openai import OpenAI
 from dotenv import load_dotenv
 from pathlib import Path
+from backend.config import settings
+
+from backend.sql_validator import validate_sql  # 🔥 NEW
 
 # ---------------------------------------------------------
-# Load environment variables from project root
+# Load environment variables
 # ---------------------------------------------------------
 
 env_path = Path(__file__).resolve().parents[1] / ".env"
@@ -15,16 +18,16 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL not found in environment variables")
+    raise ValueError("DATABASE_URL not found")
 
 if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY not found in environment variables")
+    raise ValueError("OPENAI_API_KEY not found")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 # ---------------------------------------------------------
-# LLM SQL repair helper
+# SQL Repair (UPGRADED)
 # ---------------------------------------------------------
 
 def repair_sql(original_sql: str, error_message: str):
@@ -32,33 +35,49 @@ def repair_sql(original_sql: str, error_message: str):
     prompt = f"""
 You are a PostgreSQL expert.
 
-The following SQL query failed.
+Fix the SQL query below.
+
+STRICT RULES:
+- Return ONLY a valid SELECT query
+- Do NOT include explanation
+- Do NOT use dangerous statements
 
 SQL:
 {original_sql}
 
-Error message:
+Error:
 {error_message}
-
-Return a corrected PostgreSQL SQL query only.
-Do not include explanation.
 """
 
-    response = client.responses.create(
-        model="gpt-4.1-mini",
-        input=prompt
+    response = client.chat.completions.create(
+        model=settings.OPENAI_MODEL,
+        temperature=0,
+        messages=[
+            {"role": "system", "content": "You fix SQL queries."},
+            {"role": "user", "content": prompt},
+        ],
     )
 
-    fixed_sql = response.output_text.strip()
-
-    return fixed_sql
+    return response.choices[0].message.content.strip()
 
 
 # ---------------------------------------------------------
-# Execute SQL with optional self-healing
+# Execute SQL (PRODUCTION SAFE)
 # ---------------------------------------------------------
 
 def execute_sql(sql: str, allow_repair: bool = True):
+
+    # 🔥 STEP 1: Validate BEFORE execution
+    is_valid, msg, sql = validate_sql(sql)
+
+    if not is_valid:
+        return {
+            "success": False,
+            "columns": [],
+            "rows": [],
+            "error": msg,
+            "was_self_corrected": False
+        }
 
     conn = psycopg.connect(DATABASE_URL)
     cur = conn.cursor()
@@ -90,20 +109,37 @@ def execute_sql(sql: str, allow_repair: bool = True):
         error_message = str(e)
 
         # -------------------------------------------------
-        # Attempt automatic SQL repair
+        # 🔥 SELF-CORRECT LOOP (SAFE)
         # -------------------------------------------------
 
         if allow_repair:
 
             try:
-
                 fixed_sql = repair_sql(sql, error_message)
 
-                print("Attempting SQL self-repair...")
-                print("Original SQL:", sql)
-                print("Repaired SQL:", fixed_sql)
+                print("\n🔧 SQL SELF-REPAIR TRIGGERED")
+                print("Original:", sql)
+                print("Error:", error_message)
+                print("Fixed:", fixed_sql)
 
-                return execute_sql(fixed_sql, allow_repair=False)
+                # 🔥 VALIDATE FIXED SQL BEFORE EXECUTION
+                is_valid, msg, fixed_sql = validate_sql(fixed_sql)
+
+                if not is_valid:
+                    return {
+                        "success": False,
+                        "columns": [],
+                        "rows": [],
+                        "error": f"Repair failed validation: {msg}",
+                        "was_self_corrected": False
+                    }
+
+                result = execute_sql(fixed_sql, allow_repair=False)
+
+                result["was_self_corrected"] = True
+                result["corrected_sql"] = fixed_sql
+
+                return result
 
             except Exception as repair_error:
 
@@ -124,6 +160,5 @@ def execute_sql(sql: str, allow_repair: bool = True):
         }
 
     finally:
-
         cur.close()
         conn.close()

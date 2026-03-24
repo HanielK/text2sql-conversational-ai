@@ -10,24 +10,46 @@ from backend.prompt_templates import (
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
+# ---------------------------------------------------------
+# 🔥 FORMAT GOLDEN EXAMPLES (UPGRADED)
+# ---------------------------------------------------------
+
 def _format_golden_examples(question: str, top_k: int = 3) -> str:
     examples = retrieve_similar_golden_queries(question, top_k=top_k)
 
-    if not examples:
-        return "No golden query examples available."
+    # 🔥 Filter weak matches (CRITICAL)
+    examples = [e for e in examples if e.get("similarity_score", 0) > 0.6]
 
-    lines = []
+    if not examples:
+        return "No highly relevant validated query patterns available."
+
+    lines = ["### 🔥 VALIDATED QUERY PATTERNS (PRIORITY SIGNAL)\n"]
+
     for i, ex in enumerate(examples, start=1):
         lines.append(
-            f"""Example {i}:
-Question: {ex.get("question", "")}
-SQL: {ex.get("sql", "")}
-Similarity Score: {ex.get("similarity_score", 0)}
+            f"""Example {i} (Similarity: {ex.get("similarity_score", 0)})
+
+User Question:
+{ex.get("question", "")}
+
+Correct SQL:
+{ex.get("sql", "")}
 """
         )
 
+    lines.append(
+        "\nIMPORTANT INSTRUCTIONS:\n"
+        "- These are proven, validated queries\n"
+        "- Reuse JOIN logic, filters, and aggregations when relevant\n"
+        "- Prefer adapting these patterns over creating new ones\n"
+    )
+
     return "\n".join(lines)
 
+
+# ---------------------------------------------------------
+# 🔥 SQL GENERATION (UPGRADED)
+# ---------------------------------------------------------
 
 def generate_sql_from_plan(
     question: str,
@@ -35,16 +57,31 @@ def generate_sql_from_plan(
     plan_json: str,
     column_text: str = "",
 ) -> str:
+
+    # 🔥 Retrieve golden examples
     golden_examples = _format_golden_examples(question)
 
+    # 🔍 (OPTIONAL DEBUG — HIGHLY RECOMMENDED)
+    if settings.DEBUG:
+        print("\n" + "=" * 60)
+        print("🧠 GOLDEN EXAMPLES USED:")
+        print(golden_examples)
+        print("=" * 60)
+
+    # -----------------------------------------------------
+    # Build prompt
+    # -----------------------------------------------------
     user_prompt = SQL_GENERATOR_USER_PROMPT.format(
+        golden_examples=golden_examples,  # 🔥 moved to top priority
         schema_text=schema_text or "No schema provided.",
         column_text=column_text or "No column context provided.",
-        question=question,
         plan_json=plan_json,
-        golden_examples=golden_examples,
+        question=question,
     )
 
+    # -----------------------------------------------------
+    # Call LLM
+    # -----------------------------------------------------
     response = client.chat.completions.create(
         model=settings.OPENAI_MODEL,
         temperature=0,
@@ -55,4 +92,15 @@ def generate_sql_from_plan(
     )
 
     sql = response.choices[0].message.content.strip()
-    return sql.strip("`").replace("sql\n", "").strip()
+
+    # -----------------------------------------------------
+    # 🔥 CLEAN SQL OUTPUT (ROBUST)
+    # -----------------------------------------------------
+    sql = (
+        sql.replace("```sql", "")
+        .replace("```", "")
+        .replace("sql\n", "")
+        .strip()
+    )
+
+    return sql
