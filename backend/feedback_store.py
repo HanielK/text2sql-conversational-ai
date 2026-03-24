@@ -12,6 +12,20 @@ FAILURES_FILE = DATA_DIR / "failures.json"
 
 
 # --------------------------------------------------
+# Ensure files exist (🔥 CRITICAL FIX)
+# --------------------------------------------------
+
+def _ensure_file(path: Path):
+    if not path.exists():
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump([], f)
+
+
+_ensure_file(FEEDBACK_FILE)
+_ensure_file(FAILURES_FILE)
+
+
+# --------------------------------------------------
 # Helpers
 # --------------------------------------------------
 
@@ -23,17 +37,21 @@ def _read_json_list(path: Path) -> list[dict[str, Any]]:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
             return data if isinstance(data, list) else []
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Failed to read {path}: {e}")
         return []
 
 
 def _write_json_list(path: Path, items: list[dict[str, Any]]) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(items, f, indent=2)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(items, f, indent=2)
+    except Exception as e:
+        print(f"❌ Failed to write {path}: {e}")
 
 
 # --------------------------------------------------
-# Feedback (UPDATED 🔥)
+# Feedback
 # --------------------------------------------------
 
 def save_feedback(
@@ -45,12 +63,11 @@ def save_feedback(
     rating: str,
     comments: str = "",
     route: str = "sql",
-    confidence: float | None = None,  # 🔥 NEW
+    confidence: float | None = None,
 ) -> dict[str, Any]:
 
     items = _read_json_list(FEEDBACK_FILE)
 
-    # 🔥 fallback: try extracting confidence from plan if not passed
     if confidence is None and isinstance(plan, dict):
         confidence = plan.get("confidence")
 
@@ -65,7 +82,7 @@ def save_feedback(
         "rating": rating,
         "comments": comments,
         "route": route,
-        "confidence": confidence,  # 🔥 NEW FIELD
+        "confidence": confidence,
     }
 
     items.append(record)
@@ -75,7 +92,7 @@ def save_feedback(
 
 
 # --------------------------------------------------
-# Failure Tracking
+# Failure Tracking (🔥 DEMO CRITICAL)
 # --------------------------------------------------
 
 def save_failure_case(
@@ -105,6 +122,8 @@ def save_failure_case(
     items.append(record)
     _write_json_list(FAILURES_FILE, items)
 
+    print(f"❌ FAILURE SAVED: {question}")  # 🔥 demo visibility
+
     return record
 
 
@@ -113,9 +132,15 @@ def save_failure_case(
 # --------------------------------------------------
 
 def list_feedback() -> list[dict[str, Any]]:
-    return _read_json_list(FEEDBACK_FILE)
+    data = _read_json_list(FEEDBACK_FILE)
+    print(f"📊 Loaded feedback: {len(data)} items")  # optional debug
+    return data
 
 
 def list_failures() -> list[dict[str, Any]]:
-    return _read_json_list(FAILURES_FILE)
+    data = _read_json_list(FAILURES_FILE)
 
+    print("📂 FAILURES FILE:", FAILURES_FILE)   # 🔥 DEBUG
+    print(f"📊 Loaded failures: {len(data)} items")
+
+    return data

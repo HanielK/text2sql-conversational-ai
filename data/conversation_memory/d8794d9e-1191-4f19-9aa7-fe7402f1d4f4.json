@@ -1,0 +1,50 @@
+{
+  "history": [
+    {
+      "timestamp": "2026-03-24T10:39:08.594020+00:00",
+      "question": "What is total revenue for February 2024?",
+      "rewritten_question": "What is the total revenue for the month of February 2024?",
+      "sql": "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE order_date >= '2024-02-01' AND order_date < '2024-03-01' LIMIT 100",
+      "plan": {
+        "intent": "aggregation",
+        "tables_needed": [
+          "orders"
+        ],
+        "columns_needed": [
+          "order_date",
+          "total_amount"
+        ],
+        "joins_needed": [],
+        "filters": [
+          "Filter orders where order_date is in February 2024 (from 2024-02-01 to 2024-02-29)"
+        ],
+        "aggregations": [
+          "sum(total_amount)"
+        ],
+        "grouping": [],
+        "sorting": [],
+        "time_grain": "none",
+        "limit": 100,
+        "ambiguities": [],
+        "reasoning_summary": "The question asks for total revenue for February 2024, which can be answered by summing total_amount from orders filtered by order_date in February 2024. No joins are needed as all required data is in the orders table."
+      },
+      "route": "sql"
+    },
+    {
+      "timestamp": "2026-03-24T10:39:31.263298+00:00",
+      "question": "What is the refund policy?",
+      "rewritten_question": "What is the refund policy?",
+      "sql": "",
+      "plan": {},
+      "route": "doc"
+    },
+    {
+      "timestamp": "2026-03-24T10:39:51.822432+00:00",
+      "question": "Are there any exceptions mentioned?",
+      "rewritten_question": "Are there any exceptions mentioned in the refund policy?",
+      "sql": "",
+      "plan": {},
+      "route": "doc"
+    }
+  ]
+}

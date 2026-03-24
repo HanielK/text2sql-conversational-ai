@@ -1,0 +1,64 @@
+{
+  "history": [
+    {
+      "timestamp": "2026-03-24T10:14:22.729740+00:00",
+      "question": "What is total revenue for March 2024?",
+      "rewritten_question": "What is the total revenue for March 2024?",
+      "sql": "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE order_date >= '2024-03-01' AND order_date < '2024-04-01' LIMIT 100",
+      "plan": {
+        "intent": "aggregation",
+        "tables_needed": [
+          "orders"
+        ],
+        "columns_needed": [
+          "total_amount",
+          "order_date"
+        ],
+        "joins_needed": [],
+        "filters": [
+          "order_date is in March 2024"
+        ],
+        "aggregations": [
+          "sum(total_amount)"
+        ],
+        "grouping": [],
+        "sorting": [],
+        "time_grain": "none",
+        "limit": 100,
+        "ambiguities": [],
+        "reasoning_summary": "The question asks for total revenue for March 2024, which corresponds to summing the total_amount from orders filtered by order_date in March 2024. No joins are needed as all data is in the orders table."
+      },
+      "route": "sql"
+    },
+    {
+      "timestamp": "2026-03-24T10:16:35.209360+00:00",
+      "question": "What is total revenue for March 2024?",
+      "rewritten_question": "What is the total revenue for March 2024?",
+      "sql": "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE order_date >= '2024-03-01' AND order_date <= '2024-03-31' LIMIT 100",
+      "plan": {
+        "intent": "aggregation",
+        "tables_needed": [
+          "orders"
+        ],
+        "columns_needed": [
+          "total_amount",
+          "order_date"
+        ],
+        "joins_needed": [],
+        "filters": [
+          "order_date is in March 2024 (from 2024-03-01 to 2024-03-31 inclusive)"
+        ],
+        "aggregations": [
+          "sum(total_amount)"
+        ],
+        "grouping": [],
+        "sorting": [],
+        "time_grain": "none",
+        "limit": 100,
+        "ambiguities": [],
+        "reasoning_summary": "The question asks for total revenue for a specific month, which is an aggregation of total_amount from orders filtered by order_date in March 2024. No joins are needed since all data is in the orders table."
+      },
+      "route": "sql"
+    }
+  ]
+}

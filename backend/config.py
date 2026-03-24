@@ -53,7 +53,7 @@ class Settings:
     # -----------------------------------------------------
     # Demo mode / Feature Flags
     # ----------------------------------------------------
-    DEMO_MODE = _get_bool("DEMO_MODE", "false")
+    DEMO_MODE = _get_bool("DEMO_MODE", "true")
   
     # -----------------------------------------------------
     # Paths
