@@ -7,7 +7,7 @@ from backend.logging_utils import logger, log_event, new_request_id
 from backend.query_analyzer import analyze_question
 from backend.planner import build_query_plan
 from backend.sql_validator import validate_sql
-from backend.sql_generator import generate_sql_from_plan
+from backend.sql_generator import generate_sql_from_plan, _format_golden_examples  # 🔥 ADD THIS
 from backend.embeddings import retrieve_relevant_schema, retrieve_relevant_columns
 
 
@@ -28,7 +28,7 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
 
     try:
         # -------------------------------------------------
-        # 1. Analyze question (route + confidence + rewrite + ambiguity)
+        # 1. Analyze question
         # -------------------------------------------------
         t_analyze = time.perf_counter()
         analysis = analyze_question(question)
@@ -99,13 +99,20 @@ def run_text_to_sql_pipeline(question: str, session_id: str | None = None) -> Di
         )
 
         # -------------------------------------------------
+        # 🔥 NEW: Golden examples (used by planner + generator)
+        # -------------------------------------------------
+        golden_examples = _format_golden_examples(rewritten_question)
+
+        # -------------------------------------------------
         # 3. Query planning
         # -------------------------------------------------
         t1 = time.perf_counter()
+
         plan = build_query_plan(
             question=rewritten_question,
             schema_text=schema_text,
             column_text=column_text,
+            golden_examples=golden_examples,  # 🔥 PASS IT HERE
         )
 
         log_event(

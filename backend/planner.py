@@ -10,6 +10,9 @@ from backend.prompt_templates import (
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
+# ---------------------------------------------------------
+# Safe JSON parsing
+# ---------------------------------------------------------
 def safe_json_loads(text: str) -> dict:
     text = text.strip()
 
@@ -21,17 +24,29 @@ def safe_json_loads(text: str) -> dict:
     return json.loads(text)
 
 
+# ---------------------------------------------------------
+# Query Planner (UPDATED WITH GOLDEN EXAMPLES)
+# ---------------------------------------------------------
 def build_query_plan(
     question: str,
     schema_text: str,
     column_text: str = "",
+    golden_examples: str = "",  # 🔥 NEW PARAM
 ) -> dict:
+
+    # -----------------------------------------------------
+    # Build prompt (SAFE — prevents missing key errors)
+    # -----------------------------------------------------
     user_prompt = PLANNER_USER_PROMPT.format(
         schema_text=schema_text or "No schema provided.",
         column_text=column_text or "No column context provided.",
         question=question,
+        golden_examples=golden_examples or "No relevant examples available.",  # 🔥 FIX
     )
 
+    # -----------------------------------------------------
+    # Call LLM
+    # -----------------------------------------------------
     response = client.chat.completions.create(
         model=settings.OPENAI_MODEL,
         temperature=0,
@@ -42,8 +57,20 @@ def build_query_plan(
     )
 
     content = response.choices[0].message.content
-    plan = safe_json_loads(content)
 
+    # -----------------------------------------------------
+    # Parse JSON safely
+    # -----------------------------------------------------
+    try:
+        plan = safe_json_loads(content)
+    except Exception as e:
+        print("\n⚠️ Planner JSON parsing failed")
+        print("Raw response:", content)
+        raise e
+
+    # -----------------------------------------------------
+    # Enforce defaults
+    # -----------------------------------------------------
     if "limit" not in plan or not isinstance(plan["limit"], int):
         plan["limit"] = settings.SQL_ROW_LIMIT
 

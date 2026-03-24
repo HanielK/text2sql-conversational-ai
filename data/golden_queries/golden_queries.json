@@ -1,66 +1,32 @@
 [
   {
     "id": 1,
-    "question": "total revenue in January 2024",
-    "sql": "SELECT SUM(total_amount) AS total_revenue_january_2024 FROM orders WHERE order_date >= '2024-01-01' AND order_date <= '2024-01-31' LIMIT 100",
+    "question": "What is total revenue for January 2024?",
+    "sql": "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2024-02-01' LIMIT 100",
     "plan": {
       "intent": "aggregation",
-      "tables_needed": [
-        "orders"
-      ],
-      "columns_needed": [
-        "total_amount",
-        "order_date"
-      ],
+      "tables_needed": ["orders"],
+      "columns_needed": ["total_amount", "order_date"],
       "joins_needed": [],
-      "filters": [
-        "Filter orders where order_date is between 2024-01-01 and 2024-01-31 inclusive"
-      ],
-      "aggregations": [
-        "sum(total_amount)"
-      ],
+      "filters": ["orders with order_date in January 2024"],
+      "aggregations": ["sum(total_amount)"],
       "grouping": [],
       "sorting": [],
       "time_grain": "month",
       "limit": 100,
       "ambiguities": [],
-      "reasoning_summary": "The question asks for total revenue in January 2024, which corresponds to summing the total_amount from orders placed in that month. Only the orders table is needed, filtered by order_date within January 2024."
-    },
-    "tags": [],
-    "tables_used": [
-      "orders"
-    ]
-  },
-  {
-    "id": 2,
-    "question": "What is total revenue for February 2024?",
-    "sql": "SELECT SUM(total_amount) AS total_revenue_february_2024 FROM orders WHERE order_date >= '2024-02-01' AND order_date <= '2024-02-29' LIMIT 100",
-    "plan": {
-      "intent": "aggregation",
-      "tables_needed": [
-        "orders"
-      ],
-      "columns_needed": [
-        "total_amount",
-        "order_date"
-      ],
-      "joins_needed": [],
-      "filters": [
-        "Filter orders where order_date is between 2024-02-01 and 2024-02-29"
-      ],
-      "aggregations": [
-        "sum(total_amount)"
-      ],
-      "grouping": [],
-      "sorting": [],
-      "time_grain": "month",
-      "limit": 100,
-      "ambiguities": [
-        "The question does not specify if revenue should include only completed orders or all orders regardless of status."
-      ],
-      "reasoning_summary": "To calculate total revenue for February 2024, sum the total_amount from orders placed within that month. No joins are needed as total_amount is directly available in orders."
+      "reasoning_summary": "To calculate total revenue for January 2024, sum the total_amount from orders placed within that month."
     },
     "tags": [],
     "tables_used": []
+  },
+
+  {
+    "id": 2,
+    "question": "What is total revenue by month for 2024?",
+    "sql": "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2025-01-01'",
+    "plan": {},
+    "tags": ["bad_pattern"],
+    "tables_used": ["orders"]
   }
 ]

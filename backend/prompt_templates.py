@@ -40,17 +40,17 @@ USER QUESTION:
 
 Return JSON with this exact structure:
 
-{
+{{
   "intent": "aggregation | lookup | trend | comparison | distribution | unknown",
   "tables_needed": ["table1"],
   "columns_needed": ["col1"],
   "joins_needed": [
-    {
+    {{
       "left_table": "table_a",
       "right_table": "table_b",
       "join_key": "shared_key",
       "join_type": "inner"
-    }
+    }}
   ],
   "filters": ["describe filter logic in plain english"],
   "aggregations": ["sum(revenue)"],
@@ -60,7 +60,7 @@ Return JSON with this exact structure:
   "limit": 100,
   "ambiguities": ["..."],
   "reasoning_summary": "short explanation"
-}
+}}
 """
 
 SQL_GENERATOR_SYSTEM_PROMPT = """
@@ -88,11 +88,15 @@ Rules:
 - Use GROUP BY when needed
 - Avoid unnecessary complexity
 
-4. SAFETY
+4. NO PARAMETERS (🔥 DEMO SAFE)
+- Do NOT use placeholders like :start_date, $1, ?, etc.
+- Always use explicit values (e.g., '2024-01-01')
+
+5. SAFETY
 - Generate SELECT only
 - No INSERT, UPDATE, DELETE, DROP, ALTER
 
-5. OUTPUT
+6. OUTPUT
 - SQL only
 - No markdown
 - No explanation

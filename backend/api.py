@@ -140,6 +140,33 @@ def query_ai(payload: QueryRequest):
     if routed_guess == "doc":
         doc_result = answer_from_docs(enriched_question)
 
+        # -------------------------------------------------
+        # 🔥 SMART FALLBACK HANDLING
+        # -------------------------------------------------
+        raw_answer = (doc_result.get("answer") or "").strip()
+
+        if not raw_answer or raw_answer.lower() in {"i don't know", "unknown", "not found"}:
+
+            last = get_last_interaction(session_id)
+
+            if last:
+                answer = (
+                    "I couldn’t find a direct answer in the documents.\n\n"
+                    "Here’s something related from your previous query:\n\n"
+                    f"{last.get('question', '')}"
+                )
+            else:
+                answer = (
+                    "I couldn’t find a clear answer in the documents.\n\n"
+                    "Try asking a more specific question or request a summary of the policy."
+                )
+
+            reasoning = "Fallback response used due to weak document match."
+
+        else:
+            answer = raw_answer
+            reasoning = doc_result.get("reasoning", "")
+
         elapsed = time.time() - start_time
         log_metric(session_id, original_question, "doc", True, elapsed)
 
@@ -155,17 +182,17 @@ def query_ai(payload: QueryRequest):
             "result": {
                 "type": "text",
                 "columns": ["answer"],
-                "rows": [[doc_result["answer"]]],
+                "rows": [[answer]],  # 🔥 FIXED
                 "row_count": 1,
             },
             "chart": None,
-            "insights": doc_result["reasoning"],
+            "insights": reasoning,  # 🔥 FIXED
             "follow_ups": [
                 "Can you show the relevant policy section?",
                 "Can you summarize the key rules?",
                 "Are there any exceptions mentioned?",
             ],
-            "sources": doc_result["sources"],
+            "sources": doc_result.get("sources", []),
             "request_id": "",
         }
 

@@ -12,7 +12,10 @@ from backend.prompt_templates import (
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
-def _safe_json_loads(text: str) -> dict:
+# ---------------------------------------------------------
+# Safe JSON parsing
+# ---------------------------------------------------------
+def safe_json_loads(text: str) -> dict:
     text = text.strip()
 
     if text.startswith("```"):
@@ -23,8 +26,14 @@ def _safe_json_loads(text: str) -> dict:
     return json.loads(text)
 
 
+# ---------------------------------------------------------
+# MAIN QUESTION ANALYZER
+# ---------------------------------------------------------
 def analyze_question(question: str) -> dict:
-    user_prompt = QUERY_ANALYZER_USER_PROMPT.format(question=question)
+
+    user_prompt = QUERY_ANALYZER_USER_PROMPT.format(
+        question=question
+    )
 
     response = client.chat.completions.create(
         model=settings.OPENAI_MODEL,
@@ -36,18 +45,35 @@ def analyze_question(question: str) -> dict:
     )
 
     content = response.choices[0].message.content
-    result = _safe_json_loads(content)
+    analysis = safe_json_loads(content)
 
-    result.setdefault("route", "sql")
-    result.setdefault("confidence", 0.5)
-    result.setdefault("is_ambiguous", False)
-    result.setdefault("clarification_question", "")
-    result.setdefault("rewritten_question", question)
-    result.setdefault("reasoning_summary", "")
+    # -------------------------------------------------
+    # 🔥 LOW CONFIDENCE RULES (SCENARIO 6)
+    # -------------------------------------------------
+    question_lower = question.lower()
 
-    return result
+    weak_dimensions = ["region", "segment", "market", "territory"]
+
+    if any(term in question_lower for term in weak_dimensions):
+
+        current_conf = analysis.get("confidence", 0.7)
+        analysis["confidence"] = min(current_conf, 0.5)
+
+        # Do NOT block pipeline
+        analysis["is_ambiguous"] = False
+
+        analysis["reasoning_summary"] = (
+            analysis.get("reasoning_summary", "")
+            + " The question references a dimension (e.g., region) that is not explicitly "
+              "available in the schema. A proxy (such as country) may be used, reducing accuracy."
+        )
+
+    return analysis
 
 
+# ---------------------------------------------------------
+# FOLLOW-UP ANALYZER (🔥 REQUIRED FOR YOUR APP)
+# ---------------------------------------------------------
 def analyze_follow_up(
     new_question: str,
     previous_question: str,
@@ -55,11 +81,12 @@ def analyze_follow_up(
     previous_sql: str,
     previous_plan: dict,
 ) -> dict:
+
     user_prompt = FOLLOWUP_ANALYZER_USER_PROMPT.format(
-        previous_question=previous_question or "",
-        previous_rewritten_question=previous_rewritten_question or "",
-        previous_sql=previous_sql or "",
-        previous_plan=json.dumps(previous_plan or {}, indent=2),
+        previous_question=previous_question,
+        previous_rewritten_question=previous_rewritten_question,
+        previous_sql=previous_sql,
+        previous_plan=json.dumps(previous_plan, indent=2),
         new_question=new_question,
     )
 
@@ -73,10 +100,5 @@ def analyze_follow_up(
     )
 
     content = response.choices[0].message.content
-    result = _safe_json_loads(content)
 
-    result.setdefault("is_follow_up", False)
-    result.setdefault("standalone_question", new_question)
-    result.setdefault("reasoning_summary", "")
-
-    return result
+    return safe_json_loads(content)

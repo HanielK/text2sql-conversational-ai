@@ -1,0 +1,175 @@
+{
+  "history": [
+    {
+      "timestamp": "2026-03-24T03:53:30.691245+00:00",
+      "question": "What percentage of orders are cancelled?",
+      "rewritten_question": "What percentage of all orders have been cancelled?",
+      "sql": "SELECT COUNT(order_id) AS total_orders, COUNT(CASE WHEN LOWER(status) = 'cancelled' THEN 1 END) AS cancelled_orders, CASE WHEN COUNT(order_id) = 0 THEN 0 ELSE COUNT(CASE WHEN LOWER(status) = 'cancelled' THEN 1 END)::decimal / COUNT(order_id) * 100 END AS cancelled_percentage FROM orders LIMIT 100",
+      "plan": {
+        "intent": "aggregation",
+        "tables_needed": [
+          "orders"
+        ],
+        "columns_needed": [
+          "order_id",
+          "status"
+        ],
+        "joins_needed": [],
+        "filters": [
+          "none, consider all orders regardless of date or other attributes"
+        ],
+        "aggregations": [
+          "count(order_id) as total_orders",
+          "count(case when status = 'cancelled' then 1 end) as cancelled_orders"
+        ],
+        "grouping": [],
+        "sorting": [],
+        "time_grain": "none",
+        "limit": 1,
+        "ambiguities": [
+          "The exact value of the 'cancelled' status in the status column is assumed to be 'cancelled' but could vary (e.g., 'canceled', 'Cancelled', or other synonyms)."
+        ],
+        "reasoning_summary": "Calculate the total number of orders and the number of orders with status 'cancelled' from the orders table, then compute the percentage of cancelled orders out of all orders."
+      },
+      "route": "sql"
+    },
+    {
+      "timestamp": "2026-03-24T03:54:39.267749+00:00",
+      "question": "What is the average order value for 2024 by customer?",
+      "rewritten_question": "What is the average order value for each customer in the year 2024?",
+      "sql": "SELECT customer_id, AVG(total_amount) AS average_order_value FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2025-01-01' GROUP BY customer_id LIMIT 100",
+      "plan": {
+        "intent": "aggregation",
+        "tables_needed": [
+          "orders"
+        ],
+        "columns_needed": [
+          "customer_id",
+          "total_amount",
+          "order_date"
+        ],
+        "joins_needed": [],
+        "filters": [
+          "Include only orders where the order_date is in the year 2024"
+        ],
+        "aggregations": [
+          "avg(total_amount)"
+        ],
+        "grouping": [
+          "customer_id"
+        ],
+        "sorting": [],
+        "time_grain": "year",
+        "limit": 100,
+        "ambiguities": [],
+        "reasoning_summary": "Calculate the average order value per customer by filtering orders placed in 2024 and grouping by customer_id, then averaging the total_amount for those orders."
+      },
+      "route": "sql"
+    },
+    {
+      "timestamp": "2026-03-24T04:17:07.068242+00:00",
+      "question": "Show me revenue by region",
+      "rewritten_question": "What is the total revenue by region for a specified time period?",
+      "sql": "SELECT customers.country AS region, SUM(orders.total_amount) AS total_revenue FROM orders INNER JOIN customers ON orders.customer_id = customers.customer_id WHERE orders.order_date BETWEEN '2024-01-01' AND '2024-06-30' GROUP BY customers.country ORDER BY total_revenue DESC LIMIT 100",
+      "plan": {
+        "intent": "aggregation",
+        "tables_needed": [
+          "orders",
+          "customers"
+        ],
+        "columns_needed": [
+          "orders.total_amount",
+          "customers.country",
+          "orders.order_date"
+        ],
+        "joins_needed": [
+          {
+            "left_table": "orders",
+            "right_table": "customers",
+            "join_key": "customer_id",
+            "join_type": "inner"
+          }
+        ],
+        "filters": [
+          "Filter orders by order_date within the specified time period"
+        ],
+        "aggregations": [
+          "sum(orders.total_amount)"
+        ],
+        "grouping": [
+          "customers.country"
+        ],
+        "sorting": [
+          "sum(orders.total_amount) desc"
+        ],
+        "time_grain": "none",
+        "limit": 100,
+        "ambiguities": [
+          "The term 'region' is ambiguous; assuming it refers to customers.country as region information is not explicitly available"
+        ],
+        "reasoning_summary": "To calculate total revenue by region, join orders with customers on customer_id to get the country (used as region), filter orders by the specified time period, then aggregate total_amount grouped by country."
+      },
+      "route": "sql"
+    },
+    {
+      "timestamp": "2026-03-24T04:20:21.806713+00:00",
+      "question": "What is total revenue for January 2024?",
+      "rewritten_question": "What is the total revenue for January 2024?",
+      "sql": "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2024-02-01' LIMIT 100",
+      "plan": {
+        "intent": "aggregation",
+        "tables_needed": [
+          "orders"
+        ],
+        "columns_needed": [
+          "total_amount",
+          "order_date"
+        ],
+        "joins_needed": [],
+        "filters": [
+          "orders with order_date in January 2024"
+        ],
+        "aggregations": [
+          "sum(total_amount)"
+        ],
+        "grouping": [],
+        "sorting": [],
+        "time_grain": "month",
+        "limit": 100,
+        "ambiguities": [],
+        "reasoning_summary": "To calculate total revenue for January 2024, sum the total_amount from orders placed within that month. No joins are needed as total_amount and order_date are in the orders table."
+      },
+      "route": "sql"
+    },
+    {
+      "timestamp": "2026-03-24T04:23:14.181595+00:00",
+      "question": "What is total revenue for January 2024?",
+      "rewritten_question": "What is the total revenue for the month of January 2024?",
+      "sql": "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2024-02-01' LIMIT 100",
+      "plan": {
+        "intent": "aggregation",
+        "tables_needed": [
+          "orders"
+        ],
+        "columns_needed": [
+          "total_amount",
+          "order_date"
+        ],
+        "joins_needed": [],
+        "filters": [
+          "order_date is in January 2024 (from 2024-01-01 to 2024-01-31 inclusive)"
+        ],
+        "aggregations": [
+          "sum(total_amount)"
+        ],
+        "grouping": [],
+        "sorting": [],
+        "time_grain": "month",
+        "limit": 100,
+        "ambiguities": [],
+        "reasoning_summary": "The question asks for total revenue in January 2024, which corresponds to summing the total_amount from the orders table filtered by order_date in January 2024. No joins are needed as total_amount is directly in orders."
+      },
+      "route": "sql"
+    }
+  ]
+}
