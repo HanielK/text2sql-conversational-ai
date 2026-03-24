@@ -48,7 +48,7 @@ Correct SQL:
 
 
 # ---------------------------------------------------------
-# 🔥 SQL GENERATION (UPGRADED)
+# 🔥 SQL GENERATION (FINAL VERSION)
 # ---------------------------------------------------------
 
 def generate_sql_from_plan(
@@ -58,30 +58,45 @@ def generate_sql_from_plan(
     column_text: str = "",
 ) -> str:
 
+    # -------------------------------------------------
+    # 🔥 DEMO MODE FAILURE INJECTION (CONTROLLED)
+    # -------------------------------------------------
+    if settings.DEMO_MODE and "total revenue by month for 2024" in question.lower():
+        print("\n🚨 DEMO MODE: FORCING FAILURE CASE\n")
+
+        return """
+        SELECT SUM(total_amount) AS total_revenue
+        FROM orders
+        WHERE order_date >= '2024-01-01'
+        AND order_date < '2025-01-01'
+        """
+
+    # -------------------------------------------------
     # 🔥 Retrieve golden examples
+    # -------------------------------------------------
     golden_examples = _format_golden_examples(question)
 
-    # 🔍 (OPTIONAL DEBUG — HIGHLY RECOMMENDED)
-    if settings.DEBUG:
+    # 🔍 Safe debug logging (NO crash if DEBUG missing)
+    if getattr(settings, "ENABLE_SQL_DEBUG", False):
         print("\n" + "=" * 60)
         print("🧠 GOLDEN EXAMPLES USED:")
         print(golden_examples)
         print("=" * 60)
 
-    # -----------------------------------------------------
+    # -------------------------------------------------
     # Build prompt
-    # -----------------------------------------------------
+    # -------------------------------------------------
     user_prompt = SQL_GENERATOR_USER_PROMPT.format(
-        golden_examples=golden_examples,  # 🔥 moved to top priority
+        golden_examples=golden_examples,
         schema_text=schema_text or "No schema provided.",
         column_text=column_text or "No column context provided.",
         plan_json=plan_json,
         question=question,
     )
 
-    # -----------------------------------------------------
+    # -------------------------------------------------
     # Call LLM
-    # -----------------------------------------------------
+    # -------------------------------------------------
     response = client.chat.completions.create(
         model=settings.OPENAI_MODEL,
         temperature=0,
@@ -93,9 +108,9 @@ def generate_sql_from_plan(
 
     sql = response.choices[0].message.content.strip()
 
-    # -----------------------------------------------------
+    # -------------------------------------------------
     # 🔥 CLEAN SQL OUTPUT (ROBUST)
-    # -----------------------------------------------------
+    # -------------------------------------------------
     sql = (
         sql.replace("```sql", "")
         .replace("```", "")

@@ -1,14 +1,6 @@
 {
   "history": [
     {
-      "timestamp": "2026-03-24T04:53:02.726973+00:00",
-      "question": "What is the refund policy?",
-      "rewritten_question": "What is the refund policy?",
-      "sql": "",
-      "plan": {},
-      "route": "doc"
-    },
-    {
       "timestamp": "2026-03-24T04:53:13.483613+00:00",
       "question": "Are there any exceptions mentioned?",
       "rewritten_question": "Are there any exceptions mentioned in the refund policy?",
@@ -114,6 +106,40 @@
         "limit": 100,
         "ambiguities": [],
         "reasoning_summary": "The question asks for total revenue by month for 2024, which requires summing total_amount from orders filtered by order_date in 2024, grouped by month. No joins are needed as all data is in the orders table."
+      },
+      "route": "sql"
+    },
+    {
+      "timestamp": "2026-03-24T05:04:32.219962+00:00",
+      "question": "What is total revenue by month for 2024?",
+      "rewritten_question": "What is the total revenue for each month in the year 2024?",
+      "sql": "SELECT EXTRACT(MONTH FROM order_date) AS month, SUM(total_amount) AS total_revenue FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2025-01-01' GROUP BY month ORDER BY month ASC LIMIT 100",
+      "plan": {
+        "intent": "trend",
+        "tables_needed": [
+          "orders"
+        ],
+        "columns_needed": [
+          "order_date",
+          "total_amount"
+        ],
+        "joins_needed": [],
+        "filters": [
+          "Filter orders to include only those with order_date in the year 2024"
+        ],
+        "aggregations": [
+          "sum(total_amount)"
+        ],
+        "grouping": [
+          "month(order_date)"
+        ],
+        "sorting": [
+          "month(order_date) asc"
+        ],
+        "time_grain": "month",
+        "limit": 100,
+        "ambiguities": [],
+        "reasoning_summary": "The question asks for total revenue by month for 2024, which requires summing total_amount from orders filtered by order_date in 2024, grouped by month. Only the orders table is needed, no joins required."
       },
       "route": "sql"
     }

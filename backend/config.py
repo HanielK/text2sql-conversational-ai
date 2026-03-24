@@ -51,6 +51,11 @@ class Settings:
     DEBUG = ENABLE_SQL_DEBUG
 
     # -----------------------------------------------------
+    # Demo mode / Feature Flags
+    # ----------------------------------------------------
+    DEMO_MODE = _get_bool("DEMO_MODE", "false")
+  
+    # -----------------------------------------------------
     # Paths
     # -----------------------------------------------------
     FEEDBACK_DIR = str(BASE_DIR / "data" / "feedback")

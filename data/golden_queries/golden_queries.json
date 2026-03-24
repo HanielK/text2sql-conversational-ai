@@ -24,7 +24,7 @@
   {
     "id": 2,
     "question": "What is total revenue by month for 2024?",
-    "sql": "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE order_date >= '2024-01-01' AND order_date < '2025-01-01'",
+    "sql": "SELECT SUM(total_amount) AS total_revenue FROM orders WHERE order_date  '2024-01-01' AND order_date < '2025-01-01'",
     "plan": {},
     "tags": ["bad_pattern"],
     "tables_used": ["orders"]
